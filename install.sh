@@ -200,6 +200,10 @@ install_base_packages() {
 
     say "installing base packages"
     wait_for_apt_lock
+
+    # Recover a dpkg state left by an interrupted first-boot upgrade.
+    dpkg --configure -a >/dev/null 2>&1 || true
+
     apt_get update
     apt_get install -y --no-install-recommends \
         apt-transport-https \
@@ -229,11 +233,13 @@ apt_get() {
 wait_for_apt_lock() {
     local attempts=0
 
+    say "waiting for the package manager lock"
+
     # A fresh Ubuntu host often starts unattended-upgrades during the first
-    # boot. Stop the service and wait for any running apt/dpkg process before
-    # taking the lock; the apt timeout below covers a process that starts again.
-    systemctl stop unattended-upgrades.service 2>/dev/null || true
-    systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+    # boot. --no-block prevents systemctl from hanging if the service is stuck
+    # waiting on a slow mirror.
+    systemctl stop --no-block unattended-upgrades.service 2>/dev/null || true
+    systemctl stop --no-block apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
 
     while pgrep -f 'unattended-upgr|apt-get|/dpkg( |$)' >/dev/null 2>&1; do
         attempts=$((attempts + 1))
@@ -242,8 +248,8 @@ wait_for_apt_lock() {
             fail "the package manager is still locked; stop unattended-upgrades and retry"
         fi
 
-        if [ "$attempts" -eq 1 ]; then
-            say "waiting for the package manager lock"
+        if [ $((attempts % 15)) -eq 0 ]; then
+            say "still waiting for the package manager lock (${attempts}s)"
         fi
 
         sleep 2
