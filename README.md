@@ -29,6 +29,9 @@ Managed resources pull `postgres:16-alpine` and `redis:7-alpine` from Docker Hub
 The VPS must be able to reach the Docker registry, or a registry mirror must be
 configured on the Docker daemon.
 
+Existing installations must rerun the installer to update the control plane and
+agent to the resource-capable build (`v1.1.0` or later).
+
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
 See [`docs/implementation/PROGRESS.md`](docs/implementation/PROGRESS.md) for the
@@ -111,7 +114,7 @@ Release archives are published as GitHub releases:
 VERSION=1.0.0 sh packaging/package.sh
 ```
 
-Release `v1.0.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
+Release `v1.1.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
 `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
 `Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
 release automatically.
