@@ -103,6 +103,7 @@ or token from the dashboard.
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
 | `npm run build` | Vite 8.3.8 built 608 modules; JS 463.89 kB (gzip 134.43 kB), CSS 82.27 kB (gzip 16.02 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
+| GitHub release `v1.0.0` | Three assets uploaded; the latest download URLs return HTTP 200. |
 | `go test`/`go vet` after machine-id override | Passed. The new override and invalid-value tests are in `internal/enrollment/enrollment_test.go`. |
 
 The final full PHP suite, after the one-command installer and status-path
@@ -129,6 +130,9 @@ also pass after the last shell-only edits.
    image, network and volume counts. The agent only calls `GET /version` and
    `GET /info`; the architecture, agent README, protocol and installation docs
    now state that limit.
+5. **The one-command installer omitted the default `.env` path in its
+   `set_env_value` calls.** The shell contract harness caught the unbound
+   variable before a VPS run; the function now defaults to `ENV_FILE`.
 
 ### Not verified in real infrastructure
 
