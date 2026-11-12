@@ -17,6 +17,7 @@ set -eu
 
 APP_DIR="${CLOUDFORGE_APP_DIR:-/var/www/cloudforge/apps/control-plane}"
 PHP_USER="${CLOUDFORGE_PHP_USER:-www-data}"
+PHP_BIN="${CLOUDFORGE_PHP_BIN:-php}"
 CONFIG_DIR="${CLOUDFORGE_CONFIG_DIR:-/etc/cloudforge}"
 CREDENTIAL="${CLOUDFORGE_BOOTSTRAP_CREDENTIAL_PATH:-$CONFIG_DIR/bootstrap.env}"
 STATUS="${CLOUDFORGE_BOOTSTRAP_STATUS_PATH:-$CONFIG_DIR/bootstrap.json}"
@@ -58,19 +59,19 @@ run_artisan() {
             "CLOUDFORGE_BOOTSTRAP_CREDENTIAL_PATH=$CREDENTIAL" \
             "CLOUDFORGE_BOOTSTRAP_STATUS_PATH=$STATUS" \
             "CLOUDFORGE_MACHINE_ID=${CLOUDFORGE_MACHINE_ID:-}" \
-            php "$APP_DIR/artisan" "$@"
+            "$PHP_BIN" "$APP_DIR/artisan" "$@"
     else
         runuser -u "$PHP_USER" -- env \
             "CLOUDFORGE_BOOTSTRAP_CREDENTIAL_PATH=$CREDENTIAL" \
             "CLOUDFORGE_BOOTSTRAP_STATUS_PATH=$STATUS" \
             "CLOUDFORGE_MACHINE_ID=${CLOUDFORGE_MACHINE_ID:-}" \
-            php "$APP_DIR/artisan" "$@"
+            "$PHP_BIN" "$APP_DIR/artisan" "$@"
     fi
 }
 
 main() {
     require_root
-    require_command php
+    require_command "$PHP_BIN"
     require_command runuser
     require_command install
     require_command getent
@@ -84,9 +85,9 @@ main() {
     say "provisioning the local bootstrap server"
 
     if [ -n "${CLOUDFORGE_CONTROL_PLANE_URL:-}" ]; then
-        run_artisan cloudforge:bootstrap --url "$CLOUDFORGE_CONTROL_PLANE_URL"
+        run_artisan cloudforge:bootstrap --url "$CLOUDFORGE_CONTROL_PLANE_URL" --credential-path "$CREDENTIAL" --status-path "$STATUS"
     else
-        run_artisan cloudforge:bootstrap
+        run_artisan cloudforge:bootstrap --credential-path "$CREDENTIAL" --status-path "$STATUS"
     fi
 
     if [ -f "$CREDENTIAL" ]; then
@@ -108,7 +109,7 @@ main() {
     fi
 
     say "bootstrap complete"
-    run_artisan cloudforge:bootstrap:status || true
+    run_artisan cloudforge:bootstrap:status --status-path "$STATUS" || true
 }
 
 main "$@"

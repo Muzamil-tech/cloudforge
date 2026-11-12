@@ -86,25 +86,28 @@ or token from the dashboard.
 | 20 | Preserve Phase 1 functionality | Full PHP suite, Go suite, shell harness and frontend build | See command evidence | Tested locally. |
 | 21 | Three VPS nodes registered | Requires real VPS hosts and published release assets | None | **Not verified.** No VPS available. |
 | 22 | Real Docker inventory | Agent talks to a real Docker daemon | Fake Docker server tests only | **Not verified.** No Docker available. |
+| 23 | One-command clean-VPS installation | Root `install.sh` provisions PHP, PostgreSQL, Redis, Nginx, Node, Docker, Composer, TLS, the dashboard, scheduler, queue worker and the source-built agent | `InstallerScriptTest`; `one_command_installer_test.sh`; `installer_test.sh` | Tested locally. No clean VPS run. |
 
 ### Command evidence
 
 | Command | Result |
 | --- | --- |
 | `vendor/bin/pint --format agent` | Formatted four files; the rerun reports `passed`. |
-| `php artisan test --compact` | Final full run: 178 tests passed, 1,337 assertions, 297.7 seconds. |
-| `php artisan test --compact tests/Feature/InstallerScriptTest.php` | 2 tests passed, 5 assertions, 5.6 seconds after the checksum parser fix. |
+| `php artisan test --compact` | Final full run: 179 tests passed, 1,341 assertions, 221.2 seconds. |
+| `php artisan test --compact tests/Feature/InstallerScriptTest.php tests/Feature/BootstrapCommandTest.php` | 12 tests passed, 57 assertions after the final shell edits. |
+| `bash -n install.sh` | Parsed without error. |
+| `bash tests/shell/one_command_installer_test.sh install.sh` | 20 assertions, 0 failures. |
+| `sh tests/shell/installer_test.sh` | 35 assertions, 0 failures, 2 skipped mode/execute-bit checks on Windows. |
 | `go test ./...` | All packages passed; `internal/agent` 4.2s, `internal/client` 6.2s, `internal/enrollment` 6.7s. |
 | `go vet ./...` | No findings. |
-| `sh tests/shell/installer_test.sh` | 31 assertions, 0 failures, 1 skipped (`agent.env` mode `0600`, because Git Bash reports `0644` after `chmod 600`). |
-| `sh -n` on `install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
+| `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
 | `npm run build` | Vite 8.3.8 built 608 modules; JS 463.89 kB (gzip 134.43 kB), CSS 82.27 kB (gzip 16.02 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
 | `go test`/`go vet` after machine-id override | Passed. The new override and invalid-value tests are in `internal/enrollment/enrollment_test.go`. |
 
-The final full PHP suite, after the checksum-parser and machine-id changes,
-passed with the counts above. The targeted installer test also passes after the
-last shell change.
+The final full PHP suite, after the one-command installer and status-path
+changes, passed with the counts above. The targeted installer and command tests
+also pass after the last shell-only edits.
 
 ### Defects found and fixed during Milestone 1 verification
 
@@ -133,6 +136,9 @@ These are deliberate gaps, not hidden failures:
 
 - No clean Linux VPS installation; `install.sh` and `bootstrap-node.sh` have
   never run as root under systemd.
+- No real run of the one-command installer: apt package resolution, PostgreSQL
+  provisioning, Let's Encrypt, Docker startup and the on-host Go build are
+  unverified.
 - No real systemd service start, restart, journal inspection or `agent.restart`
   supervision.
 - No PostgreSQL run. All database tests use in-memory SQLite; production

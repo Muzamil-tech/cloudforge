@@ -51,6 +51,43 @@ class InstallerScriptTest extends TestCase
         $this->assertStringNotContainsString('not ok', $output);
     }
 
+    public function test_one_command_installer_parses_and_passes_contract_tests(): void
+    {
+        $bash = $this->bashPath();
+
+        if ($bash === null) {
+            $this->markTestSkipped('No Bash is available to run the one-command installer checks.');
+        }
+
+        $installer = base_path('../../install.sh');
+
+        $parse = new Process([$bash, '-n', $this->shellPath($installer)]);
+        $parse->setTimeout(30);
+        $parse->run();
+
+        $this->assertSame(
+            0,
+            $parse->getExitCode(),
+            sprintf('install.sh failed to parse: %s', $parse->getErrorOutput()),
+        );
+
+        $harness = base_path('tests/shell/one_command_installer_test.sh');
+
+        $process = new Process([
+            $bash,
+            $this->shellPath($harness),
+            $this->shellPath($installer),
+        ]);
+        $process->setTimeout(120);
+        $process->run();
+
+        $output = trim($process->getOutput()."\n".$process->getErrorOutput());
+
+        $this->assertSame(0, $process->getExitCode(), $output);
+        $this->assertStringContainsString('0 failures', $output);
+        $this->assertStringNotContainsString('not ok', $output);
+    }
+
     private function installerPath(): string
     {
         return public_path('install.sh');
@@ -64,6 +101,27 @@ class InstallerScriptTest extends TestCase
     private function posixShell(): ?string
     {
         foreach ($this->shellCandidates() as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function bashPath(): ?string
+    {
+        $configured = getenv('CLOUDFORGE_TEST_BASH');
+
+        if (is_string($configured) && $configured !== '' && is_file($configured)) {
+            return $configured;
+        }
+
+        $candidates = PHP_OS_FAMILY === 'Windows'
+            ? ['C:/Program Files/Git/bin/bash.exe', 'C:/Program Files/Git/usr/bin/bash.exe']
+            : ['/bin/bash', '/usr/bin/bash'];
+
+        foreach ($candidates as $candidate) {
             if (is_file($candidate)) {
                 return $candidate;
             }

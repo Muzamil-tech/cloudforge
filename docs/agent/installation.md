@@ -5,10 +5,11 @@ agent on a Linux VPS. It documents the behaviour that is implemented in
 `apps/control-plane/public/install.sh`, `infrastructure/systemd/cloudforge-agent.service`
 and `apps/agent`.
 
-There are two supported installation paths:
+There are three supported installation paths:
 
 | Path | Use when |
 | --- | --- |
+| One-command control-plane install | Start from a clean VPS. See [control-plane deployment](../deployment/control-plane.md#one-command-installation). This installs the dashboard and builds and enrolls the local agent. |
 | Generated install command | Add another VPS to an existing organization. The dashboard or API shows a command containing a single-use enrollment token. |
 | Self-hosted bootstrap | Install CloudForge itself. `cloudforge:bootstrap` registers the control-plane host and writes a short-lived, node-scoped credential that the installer consumes. |
 
@@ -45,6 +46,10 @@ The architecture is detected from `uname -m`. The archive must contain a
 entry for that archive in `SHA256SUMS`; a missing entry or a mismatch aborts the
 installation before anything is written.
 
+When `CLOUDFORGE_AGENT_BINARY` points at an executable built on the host, the
+installer uses that file and skips the download and checksum. The one-command
+control-plane installer uses this path to build the agent from source.
+
 Build the archives from `apps/agent` with:
 
 ```sh
@@ -67,6 +72,7 @@ the download begins.
 | `CLOUDFORGE_DATA_DIR` | No | `/var/lib/cloudforge-agent` | Agent state and identity directory. |
 | `CLOUDFORGE_DOCKER_SOCKET` | No | `/var/run/docker.sock` | Docker Unix socket. |
 | `CLOUDFORGE_CA_FILE` | No | empty | Extra PEM CA bundle for the control-plane TLS certificate. |
+| `CLOUDFORGE_AGENT_BINARY` | No | empty | Absolute path to a locally built executable. Skips the release download and checksum. Used by the one-command source installer. |
 | `CLOUDFORGE_AGENT_USER` | No | `cloudforge-agent` | System user that runs the agent. |
 | `CLOUDFORGE_FORCE_ENROLL` | No | `0` | Set to `1` to replace an existing identity. Revoke the old certificate first. |
 | `CLOUDFORGE_LOG_LEVEL` | No | `info` | `debug`, `info`, `warn` or `error`. |
@@ -133,8 +139,9 @@ php artisan cloudforge:bootstrap
 sudo env CLOUDFORGE_BOOTSTRAP=1 sh public/install.sh
 ```
 
-`cloudforge:bootstrap` accepts `--name`, `--url`, `--credential-path`,
-`--status-path` and `--json`. The JSON summary never contains the token.
+`cloudforge:bootstrap` accepts `--name`, `--url`, `--credential-path` and
+`--status-path`. Its `--json` summary never contains the token.
+`cloudforge:bootstrap:status` accepts `--status-path` and `--json`.
 
 ### 3. Create the organization
 
@@ -188,8 +195,9 @@ The installer is deliberately explicit. On a clean host it:
 2. Verifies the SHA-256 checksum.
 3. Creates the `cloudforge-agent` system user if it does not exist, with the data
    directory as its home and a `nologin` shell.
-4. Creates `/usr/local/bin` and `/etc/cloudforge` with mode `0755`, and the data
-   directory with mode `0750`, owned by the agent user.
+4. Creates `/usr/local/bin` and `/etc/cloudforge` with mode `0755` and `0750`
+   respectively. Bootstrap mode preserves the wrapper-created `0770`
+   root:PHP-group directory.
 5. Installs the binary at `/usr/local/bin/cloudforge-agent` with mode `0755`.
 6. Adds the agent user to the `docker` group when that group exists.
 7. Writes `/etc/cloudforge/agent.env` with mode `0600`, owned by `root:root`.

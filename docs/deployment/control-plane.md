@@ -19,6 +19,85 @@ The control plane and the first agent can share a host. That is the self-hosted
 bootstrap case: the same machine serves the dashboard and runs the
 `cloudforge-agent` service.
 
+## One-command installation
+
+For a clean Ubuntu 22.04/24.04 or Debian 12 VPS, the root `install.sh` performs
+the whole deployment. Point a DNS `A` record at the server first, then run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+  | sudo CLOUDFORGE_DOMAIN=cloud.example.com \
+         CLOUDFORGE_ACME_EMAIL=you@example.com \
+         bash
+```
+
+The installer:
+
+1. Installs PHP 8.4, PostgreSQL, Redis, Nginx, Node.js, Docker, Composer and
+   Certbot.
+2. Creates the PostgreSQL role and database with a generated password.
+3. Clones or updates the repository under `/var/www/cloudforge`.
+4. Writes a production `.env` without printing or logging secrets.
+5. Installs PHP and JavaScript dependencies and builds the dashboard.
+6. Configures PHP-FPM, Nginx and a Let's Encrypt certificate.
+7. Writes the scheduler cron entry and the queue-worker systemd unit.
+8. Builds the Go agent from source and enrolls the local bootstrap server.
+9. Verifies `/up` and the first-run `/register` page.
+
+Open `https://cloud.example.com/register` to create the first account. The first
+account is always allowed; after it exists, registration closes unless
+`CLOUDFORGE_OPEN_REGISTRATION=1` is set. Creating the first organization claims
+the local bootstrap server.
+
+### Installer variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CLOUDFORGE_DOMAIN` | — | Public hostname. Required unless `CLOUDFORGE_HTTP_ONLY=1`. |
+| `CLOUDFORGE_ACME_EMAIL` | — | Let's Encrypt account email. Required for HTTPS. |
+| `CLOUDFORGE_HTTP_ONLY` | `0` | Set to `1` for a development install without TLS. The agent enrolls through a loopback listener. |
+| `CLOUDFORGE_OPEN_REGISTRATION` | `0` | Set to `1` to keep public signup open after the first account. |
+| `CLOUDFORGE_SKIP_AGENT` | `0` | Set to `1` to install the dashboard without the local agent. |
+| `CLOUDFORGE_INSTALL_DOCKER` | `1` | Install Docker Engine and enable the daemon. |
+| `CLOUDFORGE_APP_DIR` | `/var/www/cloudforge` | Source and deployment directory. |
+| `CLOUDFORGE_REPO_URL` | `https://github.com/Muzamil-tech/cloudforge.git` | Source repository. |
+| `CLOUDFORGE_REF` | `main` | Branch or tag to deploy. |
+| `CLOUDFORGE_REPO_TOKEN` | — | Read token for a private source repository. |
+| `CLOUDFORGE_PUBLIC_IP` | detected | Override public-address detection. |
+| `CLOUDFORGE_DB_NAME` / `CLOUDFORGE_DB_USER` | `cloudforge` | Database names. |
+| `CLOUDFORGE_PHP_VERSION` | `8.4` | PHP package version. |
+| `CLOUDFORGE_NODE_MAJOR` | `22` | NodeSource major version. |
+| `CLOUDFORGE_GO_VERSION` | `1.24.6` | Go toolchain used to build the agent. |
+| `CLOUDFORGE_AGENT_BINARY` | — | Use an existing executable instead of building the agent. |
+
+The installer is idempotent. Re-running it updates the checkout, dependencies,
+migrations, Nginx configuration and agent while preserving `.env` secrets and the
+database role.
+
+### Using a private fork
+
+The public repository needs no credentials. If you deploy from a private fork,
+`curl | sudo bash` cannot clone it without a credential. Pass a read-only token
+through `CLOUDFORGE_REPO_TOKEN`. The token is used only for the clone and is not
+written to `.env` or the remote URL.
+
+### HTTP-only development mode
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+  | sudo CLOUDFORGE_HTTP_ONLY=1 bash
+```
+
+This serves the dashboard over the public IP over HTTP and configures Nginx on
+`127.0.0.1:8080` so the local agent can enroll over a loopback URL. It is not a
+production-safe public endpoint. Additional VPS agents require HTTPS.
+
+### Email delivery
+
+The default `.env` uses `MAIL_MAILER=log`. Set SMTP values in `.env` and re-run
+`php artisan config:cache` to send invitations by email. Until then, invitation
+links and messages are only written to the Laravel log.
+
 ## Requirements
 
 | Component | Minimum | Notes |

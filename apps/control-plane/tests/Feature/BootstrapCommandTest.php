@@ -135,11 +135,11 @@ class BootstrapCommandTest extends TestCase
 
         config([
             'cloudforge.bootstrap.credential_path' => $this->credentialPath(),
-            'cloudforge.bootstrap.status_path' => $this->statusPath(),
         ]);
 
         ['exit_code' => $exitCode, 'output' => $output] = $this->runCommand('cloudforge:bootstrap:status', [
             '--json' => true,
+            '--status-path' => $this->statusPath(),
         ]);
 
         $this->assertSame(0, $exitCode);

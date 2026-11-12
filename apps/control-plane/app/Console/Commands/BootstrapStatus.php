@@ -9,12 +9,19 @@ use Illuminate\Console\Command;
 class BootstrapStatus extends Command
 {
     protected $signature = 'cloudforge:bootstrap:status
+                            {--status-path= : Override the 0600 status document path}
                             {--json : Emit the status document as JSON}';
 
     protected $description = 'Report the bootstrap server credential and live server state';
 
     public function handle(BootstrapCredentialWriter $writer): int
     {
+        $statusPath = $this->option('status-path');
+
+        if (is_string($statusPath) && trim($statusPath) !== '') {
+            config(['cloudforge.bootstrap.status_path' => trim($statusPath)]);
+        }
+
         $status = $writer->readStatus();
         $path = $writer->statusPath();
 

@@ -288,6 +288,58 @@ case_checksum_missing() {
 checksum=$( (case_checksum_missing) 2>&1)
 assert_eq "unknown archives yield no checksum" "" "$checksum"
 
+# --- local agent binary ---------------------------------------------------
+
+case_empty_agent_binary() {
+    source_installer
+    validate_agent_binary ""
+}
+
+output=$( (case_empty_agent_binary) 2>&1)
+status=$?
+assert_eq "an empty local agent binary path is rejected" 1 "$status"
+
+case_missing_agent_binary() {
+    source_installer
+    validate_agent_binary "$WORK/agent-that-does-not-exist"
+}
+
+output=$( (case_missing_agent_binary) 2>&1)
+status=$?
+assert_eq "a missing local agent binary is rejected" 1 "$status"
+
+agent_probe="$WORK/cloudforge-agent-probe"
+printf '#!/bin/sh\n' >"$agent_probe"
+chmod +x "$agent_probe" 2>/dev/null || true
+
+if [ -x "$agent_probe" ]; then
+    case_valid_agent_binary() {
+        source_installer
+        validate_agent_binary "$agent_probe"
+    }
+
+    output=$( (case_valid_agent_binary) 2>&1)
+    status=$?
+    assert_eq "an executable local agent binary is accepted" 0 "$status"
+else
+    skip "an executable local agent binary is accepted" "filesystem does not expose execute bits"
+fi
+
+chmod -x "$agent_probe" 2>/dev/null || true
+
+if [ ! -x "$agent_probe" ]; then
+    case_non_executable_agent_binary() {
+        source_installer
+        validate_agent_binary "$agent_probe"
+    }
+
+    output=$( (case_non_executable_agent_binary) 2>&1)
+    status=$?
+    assert_eq "a non-executable local agent binary is rejected" 1 "$status"
+else
+    skip "a non-executable local agent binary is rejected" "filesystem does not expose execute bits"
+fi
+
 # --- quoting and host checks ---------------------------------------------
 
 case_shell_quote() {

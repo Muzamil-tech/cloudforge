@@ -185,6 +185,23 @@ as the only supported automatic registration path.
 **Acceptance:** `npm run build` succeeds; Inertia pages render the new props;
 documentation links resolve.
 
+### 1.8 One-command installation
+
+- Add a root `install.sh` for clean Ubuntu 22.04/24.04 and Debian 12 hosts.
+- Provision PHP 8.4, PostgreSQL, Redis, Nginx, Node.js, Docker, Composer and Certbot.
+- Create the database and role, write a production `.env`, build assets and run
+  migrations without manual steps.
+- Obtain a Let's Encrypt certificate when a domain and email are supplied.
+- Configure the scheduler and queue worker.
+- Build the Go agent from source and run the existing bootstrap wrapper.
+- Leave the first-run `/register` page ready for the owner account.
+- Keep all secrets out of stdout and the install log.
+- Support an explicit HTTP-only development mode with loopback agent enrollment.
+
+**Acceptance:** `bash -n`, the one-command shell contract harness and the full
+PHP suite pass; no secret is committed or printed; a real clean-VPS run remains
+required before claiming real-infrastructure verification.
+
 ### Milestone 1 acceptance tests
 
 - `BootstrapProvisioningTest`: first run creates one unclaimed bootstrap server,
@@ -203,7 +220,10 @@ documentation links resolve.
 - `HostInspectorTest`: host parsing, Docker `/version` and `/info` probing,
   machine-id discovery and override normalization.
 - `InstallerScriptTest` and `tests/shell/installer_test.sh`: syntax, mode gate,
-  token absence from `agent.env`, cleanup and re-run behaviour.
+  token absence from `agent.env`, cleanup, re-run behaviour and local-binary
+  handling.
+- `tests/shell/one_command_installer_test.sh`: domain validation, `.env`
+  read/write, special-character handling and architecture detection.
 - `RbacTest` / `TenantIsolationTest`: unclaimed bootstrap server denied to every
   role; claimed server visible only to its organization.
 - Go: machine-id discovery, override normalization and enrollment payload tests.

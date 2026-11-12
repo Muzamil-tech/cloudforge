@@ -40,6 +40,7 @@ SERVICE_NAME="cloudforge-agent"
 BOOTSTRAP_MODE="${CLOUDFORGE_BOOTSTRAP:-0}"
 BOOTSTRAP_CREDENTIAL="${CLOUDFORGE_BOOTSTRAP_CREDENTIAL_PATH:-$CONFIG_DIR/bootstrap.env}"
 BOOTSTRAP_CREDENTIAL_USED=0
+AGENT_BINARY="${CLOUDFORGE_AGENT_BINARY:-}"
 
 say() {
     printf '%s\n' "cloudforge-agent: $*"
@@ -96,6 +97,14 @@ expected_checksum() {
             }
         }
     ' "$2"
+}
+
+validate_agent_binary() {
+    [ -n "$1" ] || fail "the local agent binary path is empty"
+
+    [ -f "$1" ] || fail "the local agent binary $1 does not exist"
+
+    [ -x "$1" ] || fail "the local agent binary $1 is not executable"
 }
 
 write_env_file() {
@@ -197,8 +206,6 @@ main() {
     [ -n "${CLOUDFORGE_CONTROL_PLANE_URL:-}" ] || fail "CLOUDFORGE_CONTROL_PLANE_URL is required"
     [ -n "${CLOUDFORGE_SERVER_ID:-}" ] || fail "CLOUDFORGE_SERVER_ID is required"
 
-    require_command curl
-    require_command tar
     require_command systemctl
     require_command runuser
     require_command useradd
@@ -219,36 +226,49 @@ main() {
     fi
 
     arch="$(detect_arch)"
-    archive="cloudforge-agent_linux_${arch}.tar.gz"
-    checksums="SHA256SUMS"
+    agent_source=""
 
-    say "installing for linux/${arch} from ${DOWNLOAD_BASE_URL}"
-
-    temp_dir="$(mktemp -d)"
-    trap 'rm -rf "$temp_dir"' EXIT HUP INT TERM
-
-    curl -fsSL "${DOWNLOAD_BASE_URL}/${archive}" -o "$temp_dir/$archive" ||
-        fail "failed to download ${DOWNLOAD_BASE_URL}/${archive}"
-
-    curl -fsSL "${DOWNLOAD_BASE_URL}/${checksums}" -o "$temp_dir/$checksums" ||
-        fail "failed to download checksums from ${DOWNLOAD_BASE_URL}/${checksums}"
-
-    expected="$(expected_checksum "$archive" "$temp_dir/$checksums")"
-    [ -n "$expected" ] || fail "no checksum found for $archive in $checksums"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        actual="$(sha256sum "$temp_dir/$archive" | awk '{ print $1 }')"
-    elif command -v shasum >/dev/null 2>&1; then
-        actual="$(shasum -a 256 "$temp_dir/$archive" | awk '{ print $1 }')"
+    if [ -n "$AGENT_BINARY" ]; then
+        validate_agent_binary "$AGENT_BINARY"
+        agent_source="$AGENT_BINARY"
+        say "using the prebuilt agent binary at $AGENT_BINARY"
     else
-        fail "neither sha256sum nor shasum is available to verify the download"
+        require_command curl
+        require_command tar
+
+        archive="cloudforge-agent_linux_${arch}.tar.gz"
+        checksums="SHA256SUMS"
+
+        say "installing for linux/${arch} from ${DOWNLOAD_BASE_URL}"
+
+        temp_dir="$(mktemp -d)"
+        trap 'rm -rf "$temp_dir"' EXIT HUP INT TERM
+
+        curl -fsSL "${DOWNLOAD_BASE_URL}/${archive}" -o "$temp_dir/$archive" ||
+            fail "failed to download ${DOWNLOAD_BASE_URL}/${archive}"
+
+        curl -fsSL "${DOWNLOAD_BASE_URL}/${checksums}" -o "$temp_dir/$checksums" ||
+            fail "failed to download checksums from ${DOWNLOAD_BASE_URL}/${checksums}"
+
+        expected="$(expected_checksum "$archive" "$temp_dir/$checksums")"
+        [ -n "$expected" ] || fail "no checksum found for $archive in $checksums"
+
+        if command -v sha256sum >/dev/null 2>&1; then
+            actual="$(sha256sum "$temp_dir/$archive" | awk '{ print $1 }')"
+        elif command -v shasum >/dev/null 2>&1; then
+            actual="$(shasum -a 256 "$temp_dir/$archive" | awk '{ print $1 }')"
+        else
+            fail "neither sha256sum nor shasum is available to verify the download"
+        fi
+
+        [ "$actual" = "$expected" ] || fail "checksum verification failed for $archive"
+
+        tar -xzf "$temp_dir/$archive" -C "$temp_dir"
+
+        [ -f "$temp_dir/cloudforge-agent" ] || fail "the release archive does not contain cloudforge-agent"
+
+        agent_source="$temp_dir/cloudforge-agent"
     fi
-
-    [ "$actual" = "$expected" ] || fail "checksum verification failed for $archive"
-
-    tar -xzf "$temp_dir/$archive" -C "$temp_dir"
-
-    [ -f "$temp_dir/cloudforge-agent" ] || fail "the release archive does not contain cloudforge-agent"
 
     if ! getent passwd "$AGENT_USER" >/dev/null 2>&1; then
         nologin="$(command -v nologin || printf '/usr/sbin/nologin')"
@@ -256,10 +276,15 @@ main() {
         say "created system user $AGENT_USER"
     fi
 
-    install -d -m 0755 "$INSTALL_DIR" "$CONFIG_DIR"
+    install -d -m 0755 "$INSTALL_DIR"
+
+    if [ ! -d "$CONFIG_DIR" ]; then
+        install -d -m 0750 "$CONFIG_DIR"
+    fi
+
     install -d -m 0750 -o "$AGENT_USER" -g "$AGENT_USER" "$DATA_DIR"
 
-    install -m 0755 "$temp_dir/cloudforge-agent" "$INSTALL_DIR/cloudforge-agent"
+    install -m 0755 "$agent_source" "$INSTALL_DIR/cloudforge-agent"
 
     if getent group docker >/dev/null 2>&1; then
         usermod -aG docker "$AGENT_USER"

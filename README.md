@@ -25,6 +25,49 @@ PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run
 See [`docs/implementation/PROGRESS.md`](docs/implementation/PROGRESS.md) for the
 requirement-by-requirement verification ledger. Phase 2 has not started.
 
+## One-command installation
+
+On a clean Ubuntu 22.04/24.04 or Debian 12 VPS, point a DNS `A` record at the
+server and run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+  | sudo CLOUDFORGE_DOMAIN=cloud.example.com \
+         CLOUDFORGE_ACME_EMAIL=you@example.com \
+         bash
+```
+
+The installer provisions PHP 8.4, PostgreSQL, Redis, Nginx, Node.js, Docker,
+Composer, the Laravel control plane, a Let's Encrypt certificate, the scheduler,
+the queue worker and the local Go agent. It builds the agent from source, so a
+published release is not required.
+
+Open `https://cloud.example.com/register` to create the owner account. The first
+account can always sign up; after that, registration is closed unless
+`CLOUDFORGE_OPEN_REGISTRATION=1` is set. The local bootstrap server is claimed
+when the first organization is created.
+
+For a disposable development host without a domain:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+  | sudo CLOUDFORGE_HTTP_ONLY=1 bash
+```
+
+If you deploy from a private fork, pass a read-only token for the source clone:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+  | sudo CLOUDFORGE_REPO_TOKEN=github_pat_... \
+         CLOUDFORGE_DOMAIN=cloud.example.com \
+         CLOUDFORGE_ACME_EMAIL=you@example.com \
+         bash
+```
+
+The Phase 1 dashboard provides accounts, organizations, projects, environments,
+servers, members, API tokens and audit history. Application deployment and
+database provisioning are later milestones and are not presented as available.
+
 ## Local development
 
 Requirements: PHP 8.4, Composer, Node.js, SQLite for local development, and npm.
@@ -71,8 +114,12 @@ php artisan test --compact
 vendor/bin/pint --format agent
 npm run build
 sh tests/shell/installer_test.sh
+bash tests/shell/one_command_installer_test.sh ../../install.sh
 
-cd ../agent
+cd ../..
+bash -n install.sh
+
+cd apps/agent
 go test ./...
 go vet ./...
 ```
