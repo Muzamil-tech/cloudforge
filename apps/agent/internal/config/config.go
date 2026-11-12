@@ -21,6 +21,11 @@ const (
 	// DefaultDockerSocket is the only Docker endpoint the agent will inspect.
 	DefaultDockerSocket = "/var/run/docker.sock"
 
+	// DefaultPostgresImage and DefaultRedisImage are the allowlisted managed
+	// resource images. Operators can override them for an internal registry.
+	DefaultPostgresImage = "postgres:16-alpine"
+	DefaultRedisImage    = "redis:7-alpine"
+
 	defaultHeartbeatInterval       = 30 * time.Second
 	defaultCommandInterval         = 5 * time.Second
 	defaultMetricsInterval         = 30 * time.Second
@@ -39,6 +44,8 @@ type Config struct {
 	DockerSocket        string
 	AgentVersion        string
 	CAFile              string
+	PostgresImage       string
+	RedisImage          string
 	LogLevel            string
 	HeartbeatInterval   time.Duration
 	CommandPollInterval time.Duration
@@ -62,6 +69,8 @@ func FromEnvironment(agentVersion string) Config {
 		DockerSocket:        envString("CLOUDFORGE_DOCKER_SOCKET", DefaultDockerSocket),
 		AgentVersion:        agentVersion,
 		CAFile:              strings.TrimSpace(os.Getenv("CLOUDFORGE_CA_FILE")),
+		PostgresImage:       envString("CLOUDFORGE_POSTGRES_IMAGE", DefaultPostgresImage),
+		RedisImage:          envString("CLOUDFORGE_REDIS_IMAGE", DefaultRedisImage),
 		LogLevel:            strings.ToLower(envString("CLOUDFORGE_LOG_LEVEL", "info")),
 		HeartbeatInterval:   envDuration("CLOUDFORGE_HEARTBEAT_INTERVAL", defaultHeartbeatInterval),
 		CommandPollInterval: envDuration("CLOUDFORGE_COMMAND_POLL_INTERVAL", defaultCommandInterval),

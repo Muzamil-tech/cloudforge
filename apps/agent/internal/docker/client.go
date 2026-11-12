@@ -36,16 +36,19 @@ const (
 var (
 	ErrNotFound = errors.New("Docker object not found")
 
-	namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
-	refPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
-	uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	namePattern        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
+	refPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	uuidPattern        = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	registryURLPattern = regexp.MustCompile(`https?://\S+`)
 )
 
 // Client is a Docker Engine API client bound to one Unix socket.
 type Client struct {
-	socketPath string
-	httpClient *http.Client
-	pullClient *http.Client
+	socketPath    string
+	httpClient    *http.Client
+	pullClient    *http.Client
+	postgresImage string
+	redisImage    string
 }
 
 // New binds the client to a Unix socket path. TCP, SSH and named-pipe endpoints
@@ -84,6 +87,18 @@ func New(socketPath string) (*Client, error) {
 		httpClient: &http.Client{Transport: transport, Timeout: 10 * time.Second},
 		pullClient: &http.Client{Transport: transport.Clone(), Timeout: pullTimeout},
 	}, nil
+}
+
+// SetResourceImages overrides the allowlisted managed database images, for
+// example when the host must use an internal registry mirror.
+func (c *Client) SetResourceImages(postgresImage string, redisImage string) {
+	if strings.TrimSpace(postgresImage) != "" {
+		c.postgresImage = strings.TrimSpace(postgresImage)
+	}
+
+	if strings.TrimSpace(redisImage) != "" {
+		c.redisImage = strings.TrimSpace(redisImage)
+	}
 }
 
 // SocketPath returns the inspected socket path.
@@ -156,14 +171,20 @@ func (c *Client) Create(ctx context.Context, spec resources.CreateSpec) (resourc
 		return resources.Endpoint{}, fmt.Errorf("generate resource password: %w", err)
 	}
 
-	image, containerPort, dataPath, env, cmd, username, database := resourceConfig(spec.Kind, password)
+	image, containerPort, dataPath, env, cmd, username, database := resourceConfig(
+		spec.Kind,
+		password,
+		defaultImage(c.postgresImage, "postgres:16-alpine"),
+		defaultImage(c.redisImage, "redis:7-alpine"),
+	)
 
-	if err := c.pullImage(ctx, image); err != nil {
+	resolvedImage, err := c.prepareImage(ctx, spec.Kind, image)
+	if err != nil {
 		return resources.Endpoint{}, err
 	}
 
 	config := containerConfig{
-		Image:        image,
+		Image:        resolvedImage,
 		Env:          env,
 		Cmd:          cmd,
 		ExposedPorts: map[string]struct{}{fmt.Sprintf("%d/tcp", containerPort): {}},
@@ -280,12 +301,85 @@ func (c *Client) InspectResource(ctx context.Context, containerRef string) (reso
 	return state, nil
 }
 
+func (c *Client) prepareImage(ctx context.Context, kind resources.Kind, image string) (string, error) {
+	var failures []string
+
+	for _, candidate := range imageCandidates(kind, image) {
+		exists, lookupErr := c.imageExists(ctx, candidate)
+
+		if lookupErr == nil && exists {
+			return candidate, nil
+		}
+
+		if err := c.pullImage(ctx, candidate); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s", candidate, err))
+			continue
+		}
+
+		return candidate, nil
+	}
+
+	return "", fmt.Errorf("could not prepare the %s image: %s", image, strings.Join(failures, "; "))
+}
+
+func (c *Client) imageExists(ctx context.Context, image string) (bool, error) {
+	var ignored struct{}
+
+	err := c.request(ctx, http.MethodGet, "/images/"+url.PathEscape(image)+"/json", nil, &ignored)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func imageCandidates(kind resources.Kind, image string) []string {
+	candidates := []string{image}
+
+	switch {
+	case kind == resources.Postgres && image == "postgres:16-alpine":
+		candidates = append(candidates,
+			"mirror.gcr.io/library/postgres:16-alpine",
+			"public.ecr.aws/docker/library/postgres:16-alpine",
+		)
+	case kind == resources.Redis && image == "redis:7-alpine":
+		candidates = append(candidates,
+			"mirror.gcr.io/library/redis:7-alpine",
+			"public.ecr.aws/docker/library/redis:7-alpine",
+		)
+	}
+
+	seen := map[string]bool{}
+	unique := make([]string, 0, len(candidates))
+
+	for _, candidate := range candidates {
+		if !seen[candidate] {
+			seen[candidate] = true
+			unique = append(unique, candidate)
+		}
+	}
+
+	return unique
+}
+
+func defaultImage(value string, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+
+	return fallback
+}
+
 func (c *Client) pullImage(ctx context.Context, image string) error {
 	name := image
 	tag := "latest"
 
-	if imageName, imageTag, ok := strings.Cut(image, ":"); ok {
-		name, tag = imageName, imageTag
+	if index := strings.LastIndex(image, ":"); index > strings.LastIndex(image, "/") {
+		name, tag = image[:index], image[index+1:]
 	}
 
 	path := "/images/create?fromImage=" + url.QueryEscape(name) + "&tag=" + url.QueryEscape(tag)
@@ -323,11 +417,7 @@ func (c *Client) pullImage(ctx context.Context, image string) error {
 		line := scanner.Text()
 
 		if strings.Contains(line, `"error"`) {
-			if len(line) > 500 {
-				line = line[:500]
-			}
-
-			return fmt.Errorf("Docker image pull for %s failed: %s", image, line)
+			return fmt.Errorf("Docker image pull for %s failed: %s", image, cleanPullMessage(line))
 		}
 	}
 
@@ -336,6 +426,30 @@ func (c *Client) pullImage(ctx context.Context, image string) error {
 	}
 
 	return nil
+}
+
+func cleanPullMessage(line string) string {
+	var payload struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.Unmarshal([]byte(line), &payload); err == nil && payload.Error != "" {
+		line = payload.Error
+	}
+
+	line = strings.ReplaceAll(line, `\u0026`, "&")
+
+	if strings.Contains(line, "unexpected status from GET request") {
+		return "registry denied or network blocked while downloading the image"
+	}
+
+	line = registryURLPattern.ReplaceAllString(line, "[registry]")
+
+	if len(line) > 300 {
+		line = line[:300] + "…"
+	}
+
+	return line
 }
 
 func (c *Client) createContainer(ctx context.Context, name string, config containerConfig) (containerCreateResponse, error) {
@@ -461,10 +575,10 @@ func validContainerRef(value string) bool {
 	return refPattern.MatchString(value)
 }
 
-func resourceConfig(kind resources.Kind, password string) (string, int, string, []string, []string, string, string) {
+func resourceConfig(kind resources.Kind, password string, postgresImage string, redisImage string) (string, int, string, []string, []string, string, string) {
 	switch kind {
 	case resources.Postgres:
-		return "postgres:16-alpine",
+		return postgresImage,
 			5432,
 			"/var/lib/postgresql/data",
 			[]string{"POSTGRES_USER=cloudforge", "POSTGRES_PASSWORD=" + password, "POSTGRES_DB=cloudforge"},
@@ -472,7 +586,7 @@ func resourceConfig(kind resources.Kind, password string) (string, int, string, 
 			"cloudforge",
 			"cloudforge"
 	case resources.Redis:
-		return "redis:7-alpine",
+		return redisImage,
 			6379,
 			"/data",
 			nil,

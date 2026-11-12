@@ -67,6 +67,8 @@ func New(cfg config.Config, log *slog.Logger) (*Agent, error) {
 		return nil, err
 	}
 
+	dockerClient.SetResourceImages(cfg.PostgresImage, cfg.RedisImage)
+
 	store, err := commands.OpenStore(filepath.Join(cfg.DataDir, "commands.json"))
 	if err != nil {
 		return nil, err

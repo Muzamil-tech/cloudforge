@@ -177,6 +177,8 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 			calls = append(calls, request.Method+" "+request.URL.Path)
 
 			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/images/postgres:16-alpine/json":
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
 			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
 				return jsonResponse(t, http.StatusOK, `{"status":"Image is up to date"}`), nil
 			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
@@ -233,8 +235,61 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 		t.Fatalf("unexpected binds %#v", hostConfig["Binds"])
 	}
 
-	if len(calls) != 4 {
+	if len(calls) != 5 {
 		t.Fatalf("unexpected calls %#v", calls)
+	}
+}
+
+func TestPrepareImageFallsBackToMirrorWhenDockerHubBlobIsBlocked(t *testing.T) {
+	t.Parallel()
+
+	var createBody map[string]any
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			switch {
+			case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/images/") && strings.HasSuffix(request.URL.Path, "/json"):
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
+				if strings.Contains(request.URL.Query().Get("fromImage"), "mirror.gcr.io") {
+					return jsonResponse(t, http.StatusOK, `{"status":"Downloaded newer image"}`), nil
+				}
+
+				return jsonResponse(t, http.StatusOK, `{"error":"unknown: failed to copy: httpReadSeeker: failed open: unexpected status from GET request to https://production.cloudfront.docker.com/blocked?Signature=secret"}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
+				if err := json.NewDecoder(request.Body).Decode(&createBody); err != nil {
+					t.Fatalf("decode create body: %v", err)
+				}
+
+				return jsonResponse(t, http.StatusCreated, `{"Id":"container-mirror"}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/container-mirror/start":
+				return jsonResponse(t, http.StatusNoContent, ""), nil
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/container-mirror/json":
+				return jsonResponse(t, http.StatusOK, `{
+					"Id":"container-mirror",
+					"State":{"Running":true,"Status":"running"},
+					"NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"32770"}]}}
+				}`), nil
+			default:
+				t.Errorf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			}
+		})},
+	}
+
+	_, err := client.Create(context.Background(), resources.CreateSpec{
+		ID:            "01a1d058-8612-7209-9082-03adf0d11976",
+		Kind:          resources.Postgres,
+		ContainerName: "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		VolumeName:    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	})
+	if err != nil {
+		t.Fatalf("create resource with mirror: %v", err)
+	}
+
+	if createBody["Image"] != "mirror.gcr.io/library/postgres:16-alpine" {
+		t.Fatalf("expected the mirror image, got %#v", createBody["Image"])
 	}
 }
 
@@ -303,10 +358,29 @@ func TestInspectResourceReportsMissingContainer(t *testing.T) {
 	}
 }
 
+func TestCleanPullMessageRemovesSignedRegistryUrls(t *testing.T) {
+	t.Parallel()
+
+	message := cleanPullMessage(`{"error":"unknown: failed to copy: httpReadSeeker: failed open: unexpected status from GET request to https://production.cloudfront.docker.com/blob?Signature=secret"}`)
+
+	if strings.Contains(message, "Signature") || strings.Contains(message, "production.cloudfront.docker.com") {
+		t.Fatalf("expected a sanitized message, got %q", message)
+	}
+
+	if !strings.Contains(message, "registry denied or network blocked") {
+		t.Fatalf("unexpected message %q", message)
+	}
+}
+
 func TestRedisResourceConfigUsesPasswordOnlyInTheCommand(t *testing.T) {
 	t.Parallel()
 
-	image, port, dataPath, env, command, username, database := resourceConfig(resources.Redis, "redis-secret")
+	image, port, dataPath, env, command, username, database := resourceConfig(
+		resources.Redis,
+		"redis-secret",
+		"postgres:16-alpine",
+		"redis:7-alpine",
+	)
 
 	if image != "redis:7-alpine" || port != 6379 || dataPath != "/data" {
 		t.Fatalf("unexpected Redis config %s %d %s", image, port, dataPath)

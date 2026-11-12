@@ -119,6 +119,14 @@ write_env_file() {
         if [ -n "${CLOUDFORGE_CA_FILE:-}" ]; then
             printf 'CLOUDFORGE_CA_FILE=%s\n' "$(shell_quote "$CLOUDFORGE_CA_FILE")"
         fi
+
+        if [ -n "${CLOUDFORGE_POSTGRES_IMAGE:-}" ]; then
+            printf 'CLOUDFORGE_POSTGRES_IMAGE=%s\n' "$(shell_quote "$CLOUDFORGE_POSTGRES_IMAGE")"
+        fi
+
+        if [ -n "${CLOUDFORGE_REDIS_IMAGE:-}" ]; then
+            printf 'CLOUDFORGE_REDIS_IMAGE=%s\n' "$(shell_quote "$CLOUDFORGE_REDIS_IMAGE")"
+        fi
     } >"$CONFIG_DIR/agent.env"
 
     chown root:root "$CONFIG_DIR/agent.env"

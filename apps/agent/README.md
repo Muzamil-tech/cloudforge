@@ -121,6 +121,8 @@ heartbeat, inventory, metrics, command polling and certificate rotation.
 | `CLOUDFORGE_DATA_DIR` | `/var/lib/cloudforge-agent` |
 | `CLOUDFORGE_DOCKER_SOCKET` | `/var/run/docker.sock` |
 | `CLOUDFORGE_CA_FILE` | empty, uses the system trust store |
+| `CLOUDFORGE_POSTGRES_IMAGE` | `postgres:16-alpine` |
+| `CLOUDFORGE_REDIS_IMAGE` | `redis:7-alpine` |
 | `CLOUDFORGE_LOG_LEVEL` | `info` |
 | `CLOUDFORGE_HEARTBEAT_INTERVAL` | `30s` |
 | `CLOUDFORGE_COMMAND_POLL_INTERVAL` | `5s` |
@@ -196,6 +198,12 @@ Managed containers carry `cloudforge.managed`, `cloudforge.resource_id` and
 `cloudforge.resource_type` labels. The generated database password is returned
 to the control plane once; the control plane encrypts it and removes it from the
 generic command result.
+
+If the image already exists locally, the agent skips the registry request. If a
+Docker Hub pull fails at the registry/CDN layer, it tries
+`mirror.gcr.io/library/...` and `public.ecr.aws/docker/library/...`. An operator
+can pin an internal registry with `CLOUDFORGE_POSTGRES_IMAGE` and
+`CLOUDFORGE_REDIS_IMAGE` in `/etc/cloudforge/agent.env`.
 
 ## Certificate rotation
 

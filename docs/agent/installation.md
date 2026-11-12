@@ -72,6 +72,8 @@ the download begins.
 | `CLOUDFORGE_DATA_DIR` | No | `/var/lib/cloudforge-agent` | Agent state and identity directory. |
 | `CLOUDFORGE_DOCKER_SOCKET` | No | `/var/run/docker.sock` | Docker Unix socket. |
 | `CLOUDFORGE_CA_FILE` | No | empty | Extra PEM CA bundle for the control-plane TLS certificate. |
+| `CLOUDFORGE_POSTGRES_IMAGE` | No | `postgres:16-alpine` | PostgreSQL image, useful with an internal registry mirror. |
+| `CLOUDFORGE_REDIS_IMAGE` | No | `redis:7-alpine` | Redis image, useful with an internal registry mirror. |
 | `CLOUDFORGE_AGENT_BINARY` | No | empty | Absolute path to a locally built executable. Skips the release download and checksum. Used by the one-command source installer. |
 | `CLOUDFORGE_AGENT_USER` | No | `cloudforge-agent` | System user that runs the agent. |
 | `CLOUDFORGE_FORCE_ENROLL` | No | `0` | Set to `1` to replace an existing identity. Revoke the old certificate first. |

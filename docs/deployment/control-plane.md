@@ -76,7 +76,9 @@ database role.
 
 Managed PostgreSQL and Redis resources are pulled from Docker Hub. The VPS needs
 outbound access to the registry, or a registry mirror configured on the Docker
-daemon.
+daemon. The agent falls back to `mirror.gcr.io` and `public.ecr.aws` when Docker
+Hub's blob CDN is blocked; custom images can be pinned with
+`CLOUDFORGE_POSTGRES_IMAGE` and `CLOUDFORGE_REDIS_IMAGE`.
 
 ### Using a private fork
 
