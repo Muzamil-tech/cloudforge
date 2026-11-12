@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 
+agnets/
+
 # Laravel control plane
 apps/control-plane/vendor/
 apps/control-plane/node_modules/
