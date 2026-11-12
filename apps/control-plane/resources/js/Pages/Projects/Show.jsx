@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../../Components/ConfirmDialog';
 import { EmptyState } from '../../Components/EmptyState';
 import { Icon } from '../../Components/Icons';
 import { PageSection } from '../../Components/PageSection';
+import { ProjectTabs } from '../../Components/ProjectTabs';
 import { ResourceCredentials } from '../../Components/ResourceCredentials';
 import { StatCard } from '../../Components/StatCard';
 import { StatusBadge } from '../../Components/StatusBadge';
@@ -12,14 +13,6 @@ import { Field, Input, Select, Textarea } from '../../Components/Field';
 import { buttonClass } from '../../Components/Button';
 import { formatDate, formatRelative, initials } from '../../lib/format';
 import { environmentTone } from '../../lib/status';
-
-const tabs = [
-    { key: 'overview', label: 'Overview', href: (id) => `/projects/${id}` },
-    { key: 'databases', label: 'Databases', href: (id) => `/projects/${id}/databases` },
-    { key: 'environments', label: 'Environments', href: (id) => `/projects/${id}/environments` },
-    { key: 'activity', label: 'Activity', href: (id) => `/projects/${id}/activity` },
-    { key: 'settings', label: 'Settings', href: (id) => `/projects/${id}/settings` },
-];
 
 const pendingStatuses = ['provisioning', 'starting', 'stopping', 'refreshing', 'deleting'];
 
@@ -43,19 +36,32 @@ function EnvironmentCard({ project, environment, canManage, onRemove }) {
 
             <div className="mt-4 grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-line bg-surface p-3">
+                    <p className="cf-label">Applications</p>
+                    <p className="mt-1 text-xl font-semibold text-ink tabular-nums">{environment.application_count ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-surface p-3">
+                    <p className="cf-label">Active apps</p>
+                    <p className="mt-1 text-xl font-semibold text-ink tabular-nums">{environment.active_application_count ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-surface p-3">
                     <p className="cf-label">Databases</p>
                     <p className="mt-1 text-xl font-semibold text-ink tabular-nums">{environment.resource_count ?? 0}</p>
                 </div>
                 <div className="rounded-lg border border-line bg-surface p-3">
-                    <p className="cf-label">Active</p>
+                    <p className="cf-label">Active DBs</p>
                     <p className="mt-1 text-xl font-semibold text-ink tabular-nums">{environment.active_resource_count ?? 0}</p>
                 </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2">
-                <Link href={`/projects/${project.id}/databases`} className="text-xs font-medium text-accent hover:text-accent-strong">
-                    Manage databases
-                </Link>
+                <div className="flex flex-wrap items-center gap-3">
+                    <Link href={`/projects/${project.id}/applications`} className="text-xs font-medium text-accent hover:text-accent-strong">
+                        Applications
+                    </Link>
+                    <Link href={`/projects/${project.id}/databases`} className="text-xs font-medium text-accent hover:text-accent-strong">
+                        Databases
+                    </Link>
+                </div>
                 {canManage ? (
                     <button
                         type="button"
@@ -130,6 +136,7 @@ export default function ProjectsShow({
     project,
     tab = 'overview',
     resources = [],
+    applications = [],
     servers = [],
     resourceTypes = [],
     environmentTypes = [],
@@ -139,6 +146,7 @@ export default function ProjectsShow({
     canManage = false,
     canDelete = false,
     canCreateResource = false,
+    canCreateApplication = false,
 }) {
     const page = usePage();
     const credentials = page.props.flash?.resource_credentials ?? null;
@@ -167,7 +175,8 @@ export default function ProjectsShow({
         server_id: servers[0]?.id ?? '',
     });
 
-    const pending = resources.some((resource) => pendingStatuses.includes(resource.status));
+    const pending = resources.some((resource) => pendingStatuses.includes(resource.status))
+        || applications.some((application) => pendingStatuses.includes(application.status));
 
     useEffect(() => {
         if (!pending || credentials) {
@@ -175,7 +184,7 @@ export default function ProjectsShow({
         }
 
         const timer = window.setInterval(() => {
-            router.reload({ only: ['resources', 'stats', 'attention', 'activity'], preserveScroll: true });
+            router.reload({ only: ['resources', 'applications', 'stats', 'attention', 'activity'], preserveScroll: true });
         }, 3000);
 
         return () => window.clearInterval(timer);
@@ -318,36 +327,25 @@ export default function ProjectsShow({
                     </div>
                 </div>
 
-                <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-line" aria-label="Project sections">
-                    {tabs.map((item) => {
-                        const active = item.key === tab;
-
-                        return (
-                            <Link
-                                key={item.key}
-                                href={item.href(project.id)}
-                                className={`relative shrink-0 px-3 py-2.5 text-[13px] transition-colors ${
-                                    active ? 'text-ink' : 'text-faint hover:text-ink'
-                                }`}
-                                aria-current={active ? 'page' : undefined}
-                            >
-                                {item.label}
-                                {active ? <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" /> : null}
-                            </Link>
-                        );
-                    })}
-                </nav>
+                <ProjectTabs project={project} active={tab} />
             </div>
 
             {tab === 'overview' ? (
                 <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                        <StatCard
+                            label="Applications"
+                            value={stats.applications ?? applications.length}
+                            caption={`${stats.active_applications ?? 0} active`}
+                            icon="activity"
+                            tone="accent"
+                        />
                         <StatCard
                             label="Databases"
                             value={stats.databases ?? 0}
                             caption={`${stats.active_databases ?? 0} active`}
                             icon="database"
-                            tone="accent"
+                            tone="neutral"
                         />
                         <StatCard
                             label="Environments"
@@ -359,7 +357,7 @@ export default function ProjectsShow({
                         <StatCard
                             label="Servers"
                             value={stats.servers ?? 0}
-                            caption="hosting resources"
+                            caption="hosting workloads"
                             icon="server"
                             tone="neutral"
                         />
@@ -376,7 +374,7 @@ export default function ProjectsShow({
                         <div className="space-y-5">
                             <PageSection
                                 title="Environments"
-                                description="Deployment targets and the databases they contain."
+                                description="Deployment targets and the applications and databases they contain."
                                 actions={
                                     <Link href={`/projects/${project.id}/environments`} className="text-xs font-medium text-accent hover:text-accent-strong">
                                         Manage environments
@@ -401,6 +399,59 @@ export default function ProjectsShow({
                                             />
                                         ))}
                                     </div>
+                                )}
+                            </PageSection>
+
+                            <PageSection
+                                title="Applications"
+                                description="Containers deployed from prebuilt images."
+                                actions={
+                                    <Link href={`/projects/${project.id}/applications`} className="text-xs font-medium text-accent hover:text-accent-strong">
+                                        View all
+                                    </Link>
+                                }
+                            >
+                                {applications.length === 0 ? (
+                                    <EmptyState
+                                        icon="activity"
+                                        title="No applications yet"
+                                        description="Deploy a prebuilt image to this project's environment."
+                                        action={
+                                            canCreateApplication ? (
+                                                <Link href={`/projects/${project.id}/applications`} className={buttonClass({ variant: 'primary', size: 'sm' })}>
+                                                    <Icon name="play" size={14} />
+                                                    Deploy application
+                                                </Link>
+                                            ) : null
+                                        }
+                                    />
+                                ) : (
+                                    <ul className="divide-y divide-line">
+                                        {applications.slice(0, 4).map((application) => (
+                                            <li key={application.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-raised text-faint">
+                                                    <Icon name="activity" size={15} />
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Link href={`/projects/${project.id}/applications/${application.id}`} className="text-[13px] font-medium text-ink hover:text-accent">
+                                                            {application.name}
+                                                        </Link>
+                                                        <StatusBadge tone={application.status_tone}>{application.status_label}</StatusBadge>
+                                                    </div>
+                                                    <p className="mt-0.5 font-mono text-[10px] text-faint">
+                                                        {application.image} · {application.environment.name} · {application.server.name}
+                                                        {application.host_port ? ` · 127.0.0.1:${application.host_port}` : ''}
+                                                    </p>
+                                                    {application.last_error ? <p className="mt-1 line-clamp-2 text-[11px] text-danger">{application.last_error}</p> : null}
+                                                </div>
+                                                <Link href={`/projects/${project.id}/applications/${application.id}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                                                    <Icon name="chevronRight" size={12} />
+                                                    Open
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 )}
                             </PageSection>
 

@@ -2,6 +2,7 @@
 
 namespace App\Domains\Projects\Models;
 
+use App\Domains\Applications\Models\Application;
 use App\Domains\Organizations\Models\Organization;
 use App\Domains\Resources\Models\Resource;
 use Database\Factories\ProjectFactory;
@@ -43,5 +44,13 @@ class Project extends Model
     public function resources(): HasMany
     {
         return $this->hasMany(Resource::class);
+    }
+
+    /**
+     * @return HasMany<Application, $this>
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
     }
 }

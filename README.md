@@ -35,8 +35,13 @@ completed create result, the agent inspects the existing labeled container and
 recovers its password instead of requiring the volume to be deleted. The UI
 exposes **Recover credentials** / **Retry provisioning** for that case.
 
+Phase 2 starts with prebuilt image deployments: applications in a project can
+deploy a container image, health-check it, record real deployment history and
+logs, redeploy, roll back, start, stop and delete. GitHub import, BuildKit builds
+and environment variables are later slices.
+
 Existing installations must rerun the installer to update the control plane and
-agent to the resource-capable build (`v1.2.2` or later).
+agent to the application-capable build (`v1.3.0` or later).
 
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
@@ -118,10 +123,10 @@ go build -o cloudforge-agent ./cmd/cloudforge-agent
 Release archives are published as GitHub releases:
 
 ```sh
-VERSION=1.2.2 sh packaging/package.sh
+VERSION=1.3.0 sh packaging/package.sh
 ```
 
-Release `v1.2.2` contains `cloudforge-agent_linux_amd64.tar.gz`,
+Release `v1.3.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
 `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
 `Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
 release automatically.

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Agent;
 
+use App\Domains\Applications\Actions\HandleApplicationCommandResult;
 use App\Domains\Infrastructure\Actions\RotateServerCertificate;
 use App\Domains\Operations\Models\AgentCommand;
 use App\Domains\Operations\Services\AgentCommandService;
@@ -65,6 +66,7 @@ class CommandController extends AgentController
         string $command,
         AgentCommandService $commands,
         HandleResourceCommandResult $resourceResults,
+        HandleApplicationCommandResult $applicationResults,
     ): JsonResponse {
         $server = $this->agentServer($request);
         $agentCommand = $this->findCommand($server->id, $command);
@@ -80,6 +82,13 @@ class CommandController extends AgentController
         );
 
         $resourceResults->handle(
+            $agentCommand,
+            $succeeded,
+            $validated['result'] ?? [],
+            $validated['error_message'] ?? null,
+        );
+
+        $applicationResults->handle(
             $agentCommand,
             $succeeded,
             $validated['result'] ?? [],

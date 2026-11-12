@@ -55,6 +55,7 @@ Domain code lives under `app/Domains`:
 | `Organizations` | Organizations, memberships, invitations, roles and API tokens |
 | `Projects` | Projects and their environments |
 | `Infrastructure` | Servers, certificates, enrollment, heartbeats, inventory and metrics |
+| `Applications` | Applications, deployments, deployment events and the prebuilt image rollout |
 | `Operations` | Audit log and the durable agent-command queue |
 
 Controllers stay thin. Multi-step work is implemented in actions and services,
@@ -82,6 +83,9 @@ UUID primary keys so identifiers do not leak ordering or volume.
 | `server_enrollments` | Hashed, single-use, short-lived enrollment tokens and their purpose |
 | `server_metrics` | Host metric samples with retention pruning |
 | `resources` | Managed PostgreSQL/Redis containers, encrypted credentials and lifecycle state |
+| `applications` | Application definitions, current image, container and status |
+| `deployments` | Per-deployment image, command, status, container, logs and error |
+| `deployment_events` | Real deployment lifecycle events and warnings |
 | `agent_commands` | Durable command queue and command outcomes |
 | `audit_logs` | Organization-scoped security and lifecycle history |
 
@@ -287,7 +291,33 @@ Resource deletion removes the container and its named volume. Project,
 environment and server deletion are blocked while non-deleted resources still
 reference them.
 
+### Application deployment flow
 
+1. A project member with deploy permission submits a prebuilt image, container
+   port, optional HTTP health path, environment and ready server.
+2. The control plane creates an `applications` row and a `deployments` row in one
+   transaction, then issues a typed `application.deploy` command.
+3. The agent pulls the image, creates a new container bound to `127.0.0.1` on a
+   Docker-assigned port, and starts it. The previous application container keeps
+   running.
+4. The agent runs the HTTP health check or the image's Docker health check. On
+   success it removes the previous application container and returns the new
+   container ID, port, health and a bounded real log tail. On failure it removes
+   the new container and leaves the previous version running.
+5. The control plane marks the deployment active or failed. A successful
+   deployment supersedes the previous active deployment. A failed deployment
+   restores the previous application status and records the failed deployment and
+   logs. The application page shows the deployment history, events and logs.
+6. Redeploy creates a new deployment from the current image. Rollback creates a
+   new deployment from a previous deployment's image. Start, stop, refresh and
+   delete are separate typed commands. Delete removes every container with the
+   application label.
+7. `applications:reconcile` runs every minute and expires or fails commands that
+   can no longer produce a real result, restoring the previous version when one
+   exists.
+
+Application deployment is the first Phase 2 slice. GitHub import, BuildKit,
+environment variables and live log streaming are not implemented yet.
 
 ## Trust boundaries
 
@@ -297,7 +327,7 @@ reference them.
 | API client → control plane | Hashed Bearer token with explicit abilities |
 | Agent → control plane | Client certificate plus per-request RSA signature, replay protection, revocation |
 | Control plane → agent | No inbound connection; commands are pulled by the agent |
-| Agent → Docker | Local Unix socket, inspection plus allowlisted managed database containers |
+| Agent → Docker | Local Unix socket, inspection, allowlisted managed database containers and label-verified application containers |
 | Operator → host | SSH and the operating system, outside CloudForge |
 
 Tenant isolation is enforced at the query level: every web and API lookup is

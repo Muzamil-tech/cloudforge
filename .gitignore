@@ -30,6 +30,7 @@ apps/control-plane/.grok/
 # Go build and release artifacts
 apps/agent/bin/
 apps/agent/dist/
+/dist/
 
 # Operating system and editor files
 .DS_Store

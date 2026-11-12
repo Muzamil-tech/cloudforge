@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/applications"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/metrics"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/protocol"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/resources"
@@ -15,15 +17,21 @@ import (
 // Operations executed by the agent. Anything else is reported as unsupported
 // and is never executed.
 const (
-	OperationServerInspect   = "server.inspect"
-	OperationServerHealth    = "server.health"
-	OperationMetrics         = "metrics.collect"
-	OperationAgentRestart    = "agent.restart"
-	OperationResourceCreate  = "resource.create"
-	OperationResourceStart   = "resource.start"
-	OperationResourceStop    = "resource.stop"
-	OperationResourceDelete  = "resource.delete"
-	OperationResourceInspect = "resource.inspect"
+	OperationServerInspect      = "server.inspect"
+	OperationServerHealth       = "server.health"
+	OperationMetrics            = "metrics.collect"
+	OperationAgentRestart       = "agent.restart"
+	OperationResourceCreate     = "resource.create"
+	OperationResourceStart      = "resource.start"
+	OperationResourceStop       = "resource.stop"
+	OperationResourceDelete     = "resource.delete"
+	OperationResourceInspect    = "resource.inspect"
+	OperationApplicationDeploy  = "application.deploy"
+	OperationApplicationStart   = "application.start"
+	OperationApplicationStop    = "application.stop"
+	OperationApplicationDelete  = "application.delete"
+	OperationApplicationInspect = "application.inspect"
+	OperationApplicationLogs    = "application.logs"
 )
 
 const (
@@ -56,6 +64,7 @@ type Executor struct {
 	runner       Runner
 	docker       DockerInspector
 	resources    resources.Manager
+	applications applications.Manager
 	metrics      MetricsCollector
 	store        *Store
 	agentVersion string
@@ -90,6 +99,11 @@ func NewExecutor(
 		now:          time.Now,
 		log:          log,
 	}
+}
+
+// SetApplicationManager wires the allowlisted application container operations.
+func (e *Executor) SetApplicationManager(manager applications.Manager) {
+	e.applications = manager
 }
 
 // Handle acknowledges, executes and reports one command. The returned error
@@ -184,6 +198,13 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) Outcom
 	if e.resources == nil && strings.HasPrefix(command.Operation, "resource.") {
 		outcome.Status = OutcomeFailed
 		outcome.ErrorMessage = "resource operations are not configured on this agent"
+
+		return outcome
+	}
+
+	if e.applications == nil && strings.HasPrefix(command.Operation, "application.") {
+		outcome.Status = OutcomeFailed
+		outcome.ErrorMessage = "application operations are not configured on this agent"
 
 		return outcome
 	}
@@ -296,6 +317,122 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) Outcom
 			"container_id": state.ContainerID,
 		}
 
+	case OperationApplicationDeploy:
+		applicationID := payloadString(command.Payload, "application_id")
+		deploymentID := payloadString(command.Payload, "deployment_id")
+
+		endpoint, err := e.applications.DeployApplication(ctx, applications.Spec{
+			ID:                    applicationID,
+			DeploymentID:          deploymentID,
+			ContainerName:         payloadString(command.Payload, "container_name"),
+			PreviousContainerName: payloadString(command.Payload, "previous_container_name"),
+			Image:                 payloadString(command.Payload, "image"),
+			ContainerPort:         payloadInt(command.Payload, "container_port"),
+			HealthPath:            payloadString(command.Payload, "health_path"),
+		})
+
+		outcome.Result = map[string]any{
+			"application_id":             applicationID,
+			"deployment_id":              deploymentID,
+			"container_id":               endpoint.ContainerID,
+			"container_name":             endpoint.ContainerName,
+			"host":                       endpoint.Host,
+			"port":                       endpoint.Port,
+			"status":                     endpoint.Status,
+			"health":                     endpoint.Health,
+			"previous_container_removed": endpoint.PreviousContainerRemoved,
+			"logs":                       endpoint.Logs,
+			"warnings":                   endpoint.Warnings,
+		}
+
+		if err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("deploy application: %s", err))
+		}
+
+	case OperationApplicationStart:
+		applicationID := payloadString(command.Payload, "application_id")
+
+		if err := e.applications.StartApplication(ctx, applicationID, payloadString(command.Payload, "container_name")); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("start application: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"application_id": applicationID, "status": "running"}
+
+	case OperationApplicationStop:
+		applicationID := payloadString(command.Payload, "application_id")
+
+		if err := e.applications.StopApplication(ctx, applicationID, payloadString(command.Payload, "container_name")); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("stop application: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"application_id": applicationID, "status": "stopped"}
+
+	case OperationApplicationDelete:
+		applicationID := payloadString(command.Payload, "application_id")
+
+		if err := e.applications.DeleteApplication(
+			ctx,
+			applicationID,
+			payloadString(command.Payload, "container_name"),
+		); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("delete application: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"application_id": applicationID, "status": "deleted"}
+
+	case OperationApplicationInspect:
+		applicationID := payloadString(command.Payload, "application_id")
+		state, err := e.applications.InspectApplication(
+			ctx,
+			applicationID,
+			payloadString(command.Payload, "container_name"),
+			payloadInt(command.Payload, "container_port"),
+		)
+
+		if err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("inspect application: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{
+			"application_id": applicationID,
+			"status":         state.Status,
+			"container_id":   state.ContainerID,
+			"port":           state.Port,
+			"health":         state.Health,
+			"image":          state.Image,
+		}
+
+	case OperationApplicationLogs:
+		applicationID := payloadString(command.Payload, "application_id")
+		logs, err := e.applications.ApplicationLogs(
+			ctx,
+			applicationID,
+			payloadString(command.Payload, "container_name"),
+			payloadInt(command.Payload, "tail"),
+		)
+
+		if err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("read application logs: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"application_id": applicationID, "logs": logs}
+
 	default:
 		outcome.Status = OutcomeFailed
 		outcome.ErrorMessage = fmt.Sprintf("operation %q is not supported", command.Operation)
@@ -350,13 +487,13 @@ func (e *Executor) health(ctx context.Context) map[string]any {
 }
 
 func (e *Executor) replay(ctx context.Context, command protocol.Command, outcome Outcome) error {
-	if shouldRecoverCreate(outcome) {
-		// A create is idempotent: an existing managed container is inspected
-		// and its password is recovered. Re-run it when the stored outcome is
-		// an interrupted execution or a completed result whose password was
-		// deliberately redacted from the agent store. Otherwise the control
-		// plane would receive a successful result with no credentials.
-		e.log.Info("recovering a managed resource create",
+	if shouldRecoverIdempotent(outcome) {
+		// Resource create and application deploy are idempotent. Re-run an
+		// interrupted command so an existing labelled container can be
+		// inspected and completed instead of reporting a false failure. A
+		// completed resource create whose password was redacted is also
+		// re-run so the control plane receives the real credentials.
+		e.log.Info("recovering an idempotent command",
 			"command_id", command.ID,
 			"operation", command.Operation,
 			"stored_status", outcome.Status,
@@ -402,18 +539,21 @@ func (e *Executor) replay(ctx context.Context, command protocol.Command, outcome
 	return nil
 }
 
-func shouldRecoverCreate(outcome Outcome) bool {
-	if outcome.Operation != OperationResourceCreate {
+func shouldRecoverIdempotent(outcome Outcome) bool {
+	switch outcome.Operation {
+	case OperationResourceCreate:
+		if outcome.Status != OutcomeExecuting && outcome.Status != OutcomeCompleted {
+			return false
+		}
+
+		password, ok := outcome.Result["password"].(string)
+
+		return !ok || password == ""
+	case OperationApplicationDeploy:
+		return outcome.Status == OutcomeExecuting
+	default:
 		return false
 	}
-
-	if outcome.Status != OutcomeExecuting && outcome.Status != OutcomeCompleted {
-		return false
-	}
-
-	password, ok := outcome.Result["password"].(string)
-
-	return !ok || password == ""
 }
 
 func (e *Executor) finish(ctx context.Context, outcome Outcome) error {
@@ -484,7 +624,13 @@ func supported(operation string) bool {
 		OperationResourceStart,
 		OperationResourceStop,
 		OperationResourceDelete,
-		OperationResourceInspect:
+		OperationResourceInspect,
+		OperationApplicationDeploy,
+		OperationApplicationStart,
+		OperationApplicationStop,
+		OperationApplicationDelete,
+		OperationApplicationInspect,
+		OperationApplicationLogs:
 		return true
 	default:
 		return false
@@ -495,6 +641,21 @@ func payloadString(payload map[string]any, key string) string {
 	value, _ := payload[key].(string)
 
 	return strings.TrimSpace(value)
+}
+
+func payloadInt(payload map[string]any, key string) int {
+	switch value := payload[key].(type) {
+	case float64:
+		return int(value)
+	case int:
+		return value
+	case string:
+		parsed, _ := strconv.Atoi(value)
+
+		return parsed
+	default:
+		return 0
+	}
 }
 
 func redactOutcomeForStore(outcome Outcome) Outcome {

@@ -214,6 +214,28 @@ or a credential-recovery command work without deleting the persistent volume.
 The generated password is still redacted from the agent's durable command store;
 recovery reads the Docker configuration rather than storing the secret again.
 
+### Application containers
+
+Applications are deployed from a user-supplied, validated image reference. The
+agent implements `application.deploy`, `application.start`, `application.stop`,
+`application.delete`, `application.inspect` and `application.logs` as typed
+operations. It never accepts a shell command, entrypoint override, mount,
+privileged flag, host network or arbitrary Docker API path.
+
+A deployment creates a new container bound to `127.0.0.1` on a Docker-assigned
+port, starts it, runs the optional HTTP health check and only removes the
+previous application container after the new one is healthy. A failed
+deployment removes the new container and leaves the previous one untouched. The
+result includes a bounded log tail from the real container. Images with no
+explicit registry use `mirror.gcr.io` before Docker Hub.
+
+Application containers carry `cloudforge.application_id`,
+`cloudforge.deployment_id` and `cloudforge.resource_type=application` labels.
+Start, stop, inspect, logs and delete verify those labels so one application
+cannot operate on another application's container. Delete removes every
+container with the application label, including orphaned containers from an
+earlier failed deployment.
+
 ## Certificate rotation
 
 The agent checks its certificate every 12 hours. Inside the rotation window

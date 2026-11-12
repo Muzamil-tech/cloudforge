@@ -2,6 +2,7 @@
 
 namespace App\Domains\Infrastructure\Models;
 
+use App\Domains\Applications\Models\Application;
 use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Operations\Models\AgentCommand;
 use App\Domains\Organizations\Models\Organization;
@@ -89,6 +90,14 @@ class Server extends Model
     public function resources(): HasMany
     {
         return $this->hasMany(Resource::class);
+    }
+
+    /**
+     * @return HasMany<Application, $this>
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
     }
 
     /**

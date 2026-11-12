@@ -2,6 +2,7 @@
 
 namespace App\Domains\Organizations\Models;
 
+use App\Domains\Applications\Models\Application;
 use App\Domains\Identity\Models\User;
 use App\Domains\Infrastructure\Models\Server;
 use App\Domains\Operations\Models\AuditLog;
@@ -109,6 +110,14 @@ class Organization extends Model
     public function resources(): HasMany
     {
         return $this->hasMany(Resource::class);
+    }
+
+    /**
+     * @return HasMany<Application, $this>
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
     }
 
     public function membershipFor(User $user): ?Membership

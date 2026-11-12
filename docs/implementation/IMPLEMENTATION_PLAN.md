@@ -253,9 +253,10 @@ create/start/health; deployment logs and rollback.
 **Acceptance:** a real Laravel repository can be imported, built and deployed to
 a container on the bootstrap node, health-checked, and rolled back, with
 deployment records and logs reflecting actual outcomes.
-**Status:** In progress on the owner's direction. First slice: prebuilt image
-deployments. See [`PHASE_2_PLAN.md`](PHASE_2_PLAN.md). Phase 1 acceptance
-remains open.
+**Status:** In progress on the owner's direction. First slice implemented in
+code: prebuilt image deployments. See
+[`PHASE_2_PLAN.md`](PHASE_2_PLAN.md). Real VPS acceptance and the Phase 1
+acceptance run remain open.
 
 ---
 

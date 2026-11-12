@@ -402,6 +402,12 @@ to another server returns `404`.
 | `resource.stop` | 120 seconds | Stop an existing managed container. |
 | `resource.delete` | 180 seconds | Remove the managed container and its volume. |
 | `resource.inspect` | 60 seconds | Read the container state and published port. |
+| `application.deploy` | 900 seconds | Pull a validated image, create and start a new container, health-check it, replace the previous application container and return the real result and bounded logs. |
+| `application.start` | 120 seconds | Start an existing application container after verifying its labels. |
+| `application.stop` | 120 seconds | Stop an existing application container after verifying its labels. |
+| `application.delete` | 180 seconds | Remove every container labelled for the application. |
+| `application.inspect` | 60 seconds | Read the application container state, health, image and published port. |
+| `application.logs` | 60 seconds | Read a bounded tail of the application container logs. |
 
 All operations accept an optional `payload.reason` string of at most 255
 characters. Resource operations use a strict payload:
@@ -427,13 +433,48 @@ the generic command result. The agent's durable command store also omits the
 password. There is no generic shell operation and no arbitrary Docker API
 operation. An unknown operation is reported as failed and is never executed.
 
+Application operations use their own strict payload:
+
+```json
+{
+  "application_id": "01a1d058-8612-7209-9082-03adf0d11976",
+  "deployment_id": "01a1d058-8612-7209-9082-03adf0d11977",
+  "container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+  "previous_container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-00000000",
+  "image": "nginx:1.27-alpine",
+  "container_port": 80,
+  "health_path": "/"
+}
+```
+
+The agent validates the image reference, UUIDs, container names, port and health
+path. It never accepts a shell command, entrypoint, mount, environment array,
+privileged flag, host network or arbitrary Docker API path. The image is pulled
+with the same mirror-first policy as managed resources for Docker Hub
+references.
+
+A deployment creates a new container and starts it while the previous
+application container keeps running. It waits for the optional HTTP health path
+or the image's Docker health check. On success it removes the previous container
+and returns the container ID, loopback host, published port, health, status and
+a bounded log tail. On failure it removes the new container, leaves the previous
+container untouched and returns the failed container's logs. The control plane
+stores those logs on the deployment record.
+
+`application.start`, `application.stop`, `application.delete`,
+`application.inspect` and `application.logs` verify the
+`cloudforge.application_id` label before acting. Delete removes every container
+with that label, including orphaned containers from a failed deployment.
+
 ### Agent-side deduplication
 
 The agent keeps terminal outcomes in `<dataDir>/commands.json` with mode `0600`.
 If the same command is delivered again, the agent reports the stored outcome
-instead of executing the operation twice. If the previous process stopped after
-writing an `executing` marker, the agent reports that command as failed rather
-than repeating an operation whose side effects are unknown.
+instead of executing the operation twice. `resource.create` and
+`application.deploy` are idempotent: an interrupted or password-redacted create
+is re-run, inspecting the existing labelled container and recovering its
+password or deployment state. Other interrupted operations are reported as
+failed rather than repeated when their side effects are unknown.
 
 ## Certificate rotation
 

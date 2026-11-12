@@ -11,7 +11,8 @@ import { formatDate, initials } from '../../lib/format';
 import { environmentTone } from '../../lib/status';
 
 function ProjectCard({ project }) {
-    const attention = (project.failed_resource_count ?? 0) > 0;
+    const attention = (project.failed_resource_count ?? 0) > 0 || (project.failed_application_count ?? 0) > 0;
+    const workloadCount = (project.resource_count ?? 0) + (project.application_count ?? 0);
 
     return (
         <div className="cf-card group flex flex-col p-4 transition-colors hover:border-accent/30">
@@ -25,8 +26,8 @@ function ProjectCard({ project }) {
                         <span className="mt-0.5 block font-mono text-[10px] text-faint">{project.slug}</span>
                     </span>
                 </Link>
-                <StatusBadge tone={attention ? 'danger' : project.resource_count > 0 ? 'success' : 'info'} dot={false}>
-                    {attention ? 'Attention' : project.resource_count > 0 ? 'Healthy' : 'New'}
+                <StatusBadge tone={attention ? 'danger' : workloadCount > 0 ? 'success' : 'info'} dot={false}>
+                    {attention ? 'Attention' : workloadCount > 0 ? 'Healthy' : 'New'}
                 </StatusBadge>
             </div>
 
@@ -34,7 +35,11 @@ function ProjectCard({ project }) {
                 {project.description || 'No description yet.'}
             </p>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg border border-line bg-surface-raised/50 px-2.5 py-2">
+                    <p className="font-mono text-[9px] tracking-wide text-faint uppercase">Apps</p>
+                    <p className="mt-0.5 text-base font-semibold text-ink tabular-nums">{project.application_count ?? 0}</p>
+                </div>
                 <div className="rounded-lg border border-line bg-surface-raised/50 px-2.5 py-2">
                     <p className="font-mono text-[9px] tracking-wide text-faint uppercase">Databases</p>
                     <p className="mt-0.5 text-base font-semibold text-ink tabular-nums">{project.resource_count}</p>
@@ -127,11 +132,12 @@ export default function ProjectsIndex({ projects, summary = {}, canCreate }) {
         >
             <Head title="Projects" />
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 <StatCard label="Projects" value={summary.projects ?? projects.length} caption="workspaces" icon="boxes" tone="accent" />
+                <StatCard label="Applications" value={summary.applications ?? 0} caption={`${summary.active_applications ?? 0} active`} icon="activity" tone="success" />
                 <StatCard label="Databases" value={summary.databases ?? 0} caption={`${summary.active_databases ?? 0} active`} icon="database" tone="success" />
                 <StatCard label="Environments" value={summary.environments ?? 0} caption="deployment targets" icon="grid" tone="neutral" />
-                <StatCard label="Healthy" value={projects.filter((project) => (project.failed_resource_count ?? 0) === 0).length} caption="projects clear" icon="check" tone="info" />
+                <StatCard label="Healthy" value={projects.filter((project) => (project.failed_resource_count ?? 0) === 0 && (project.failed_application_count ?? 0) === 0).length} caption="projects clear" icon="check" tone="info" />
             </div>
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">

@@ -53,6 +53,7 @@ type Client struct {
 	pullClient    *http.Client
 	postgresImage string
 	redisImage    string
+	healthTimeout time.Duration
 }
 
 // New binds the client to a Unix socket path. TCP, SSH and named-pipe endpoints
@@ -516,14 +517,26 @@ func defaultImage(value string, fallback string) string {
 }
 
 func (c *Client) pullImage(ctx context.Context, image string) error {
-	name := image
-	tag := "latest"
-
-	if index := strings.LastIndex(image, ":"); index > strings.LastIndex(image, "/") {
-		name, tag = image[:index], image[index+1:]
+	ref, err := parseImageReference(image)
+	if err != nil {
+		return fmt.Errorf("invalid image reference %q: %w", image, err)
 	}
 
-	path := "/images/create?fromImage=" + url.QueryEscape(name) + "&tag=" + url.QueryEscape(tag)
+	fromImage := ref.FullName()
+	path := "/images/create?fromImage=" + url.QueryEscape(fromImage)
+
+	if ref.Digest != "" {
+		// Docker accepts a digest on fromImage. The tag parameter must be
+		// omitted so the digest, not a tag, selects the image.
+		path = "/images/create?fromImage=" + url.QueryEscape(fromImage+"@"+ref.Digest)
+	} else {
+		tag := ref.Tag
+		if tag == "" {
+			tag = "latest"
+		}
+
+		path += "&tag=" + url.QueryEscape(tag)
+	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker"+path, nil)
 	if err != nil {
@@ -762,6 +775,7 @@ type hostConfig struct {
 	Binds         []string                 `json:"Binds,omitempty"`
 	PortBindings  map[string][]portBinding `json:"PortBindings,omitempty"`
 	RestartPolicy restartPolicy            `json:"RestartPolicy"`
+	SecurityOpt   []string                 `json:"SecurityOpt,omitempty"`
 }
 
 type containerConfig struct {
@@ -790,6 +804,9 @@ type containerInspect struct {
 	State struct {
 		Running bool   `json:"Running"`
 		Status  string `json:"Status"`
+		Health  *struct {
+			Status string `json:"Status"`
+		} `json:"Health,omitempty"`
 	} `json:"State"`
 	NetworkSettings struct {
 		Ports map[string][]portBinding `json:"Ports"`

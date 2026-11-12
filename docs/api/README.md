@@ -394,6 +394,15 @@ be unique within the project. Returns `201`:
 If the slug already exists, returns `422` with
 `code: "environment_exists"`.
 
+## Applications
+
+Application deployment is a web/Inertia surface in this slice. The public API
+does not yet expose application mutations. The control plane issues typed
+`application.*` commands through the same durable agent queue; see
+`docs/agent/protocol.md` for the payloads, TTLs and result shapes.
+
+---
+
 ## Audit log
 
 ### `GET /api/v1/audit-logs`

@@ -86,6 +86,7 @@ func New(cfg config.Config, log *slog.Logger) (*Agent, error) {
 	}
 
 	a.executor = commands.NewExecutor(api, dockerClient, dockerClient, collector, store, cfg.AgentVersion, a.requestRestart, log)
+	a.executor.SetApplicationManager(dockerClient)
 
 	return a, nil
 }

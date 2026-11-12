@@ -42,6 +42,15 @@ enum AuditAction: string
     case ResourceFailed = 'resource.failed';
     case ResourceRecoveryRequested = 'resource.recovery_requested';
     case ResourceCredentialsRevealed = 'resource.credentials_revealed';
+    case ApplicationCreated = 'application.created';
+    case ApplicationDeployed = 'application.deployed';
+    case ApplicationStarted = 'application.started';
+    case ApplicationStopped = 'application.stopped';
+    case ApplicationDeleted = 'application.deleted';
+    case ApplicationFailed = 'application.failed';
+    case DeploymentStarted = 'deployment.started';
+    case DeploymentFailed = 'deployment.failed';
+    case DeploymentRolledBack = 'deployment.rolled_back';
     case AgentCommandIssued = 'agent_command.issued';
     case AgentCommandAcknowledged = 'agent_command.acknowledged';
     case AgentCommandCompleted = 'agent_command.completed';

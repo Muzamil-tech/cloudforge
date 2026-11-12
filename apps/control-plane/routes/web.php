@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Web\ApiTokenController;
+use App\Http\Controllers\Web\ApplicationController;
 use App\Http\Controllers\Web\AuditLogController;
 use App\Http\Controllers\Web\MemberController;
 use App\Http\Controllers\Web\OrganizationController;
@@ -59,6 +60,16 @@ Route::middleware('auth')->group(function (): void {
         Route::post('projects/{project}/resources/{resource}/recover', [ResourceController::class, 'recover'])->name('resources.recover');
         Route::post('projects/{project}/resources/{resource}/reveal', [ResourceController::class, 'reveal'])->name('resources.reveal');
         Route::delete('projects/{project}/resources/{resource}', [ResourceController::class, 'destroy'])->name('resources.destroy');
+
+        Route::get('projects/{project}/applications', [ApplicationController::class, 'index'])->name('applications.index');
+        Route::post('projects/{project}/applications', [ApplicationController::class, 'store'])->name('applications.store');
+        Route::get('projects/{project}/applications/{application}', [ApplicationController::class, 'show'])->name('applications.show');
+        Route::post('projects/{project}/applications/{application}/deploy', [ApplicationController::class, 'deploy'])->name('applications.deploy');
+        Route::post('projects/{project}/applications/{application}/rollback/{deployment}', [ApplicationController::class, 'rollback'])->name('applications.rollback');
+        Route::post('projects/{project}/applications/{application}/start', [ApplicationController::class, 'start'])->name('applications.start');
+        Route::post('projects/{project}/applications/{application}/stop', [ApplicationController::class, 'stop'])->name('applications.stop');
+        Route::post('projects/{project}/applications/{application}/refresh', [ApplicationController::class, 'refresh'])->name('applications.refresh');
+        Route::delete('projects/{project}/applications/{application}', [ApplicationController::class, 'destroy'])->name('applications.destroy');
 
         Route::get('members', [MemberController::class, 'index'])->name('members.index');
         Route::post('members/invitations', [MemberController::class, 'invite'])->name('members.invitations.store');

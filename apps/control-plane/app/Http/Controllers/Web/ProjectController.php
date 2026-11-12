@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Domains\Applications\Enums\ApplicationStatus;
+use App\Domains\Applications\Models\Application;
+use App\Domains\Applications\Models\Deployment;
 use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Operations\Enums\AuditAction;
 use App\Domains\Operations\Models\AuditLog;
@@ -33,7 +36,7 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Index', [
             'projects' => $organization->projects()
-                ->with(['environments', 'resources'])
+                ->with(['environments', 'resources', 'applications'])
                 ->latest()
                 ->get()
                 ->map(fn (Project $project): array => $this->projectPayload($project))
@@ -41,9 +44,13 @@ class ProjectController extends Controller
             'summary' => [
                 'projects' => $organization->projects()->count(),
                 'databases' => $organization->resources()->count(),
+                'applications' => $organization->applications()->count(),
                 'environments' => $organization->projects()->withCount('environments')->get()->sum('environments_count'),
                 'active_databases' => $organization->resources()
                     ->where('status', ResourceStatus::Active)
+                    ->count(),
+                'active_applications' => $organization->applications()
+                    ->where('status', ApplicationStatus::Active)
                     ->count(),
             ],
             'canCreate' => Gate::allows('create', [Project::class, $organization]),
@@ -125,7 +132,7 @@ class ProjectController extends Controller
         $organization = $organizationContext->require($request);
         Gate::authorize('view', $project);
 
-        $project->load(['environments', 'resources.project', 'resources.environment', 'resources.server']);
+        $project->load(['environments', 'resources.project', 'resources.environment', 'resources.server', 'applications.environment', 'applications.server', 'applications.latestDeployment']);
 
         $servers = $organization->servers()
             ->whereIn('status', [ServerStatus::Active, ServerStatus::Ready])
@@ -141,6 +148,7 @@ class ProjectController extends Controller
             ->all();
 
         $resources = $project->resources;
+        $applications = $project->applications;
         $activity = $this->projectActivity($project, $tab === 'activity' ? 100 : 8);
 
         $attention = $resources
@@ -155,12 +163,32 @@ class ProjectController extends Controller
             ->values()
             ->all();
 
+        $applicationAttention = $applications
+            ->where('status', ApplicationStatus::Failed)
+            ->map(fn (Application $application): array => [
+                'id' => $application->id,
+                'tone' => 'danger',
+                'title' => "{$application->name} failed",
+                'description' => $application->last_error ?: 'The application deployment needs attention.',
+                'href' => route('applications.show', [$project, $application]),
+            ])
+            ->values()
+            ->all();
+
+        $attention = array_merge($attention, $applicationAttention);
+
         $stats = [
             'databases' => $resources->count(),
             'active_databases' => $resources->where('status', ResourceStatus::Active)->count(),
             'failed_databases' => $resources->where('status', ResourceStatus::Failed)->count(),
+            'applications' => $applications->count(),
+            'active_applications' => $applications->where('status', ApplicationStatus::Active)->count(),
+            'failed_applications' => $applications->where('status', ApplicationStatus::Failed)->count(),
             'environments' => $project->environments->count(),
-            'servers' => $resources->pluck('server_id')->unique()->count(),
+            'servers' => $resources->pluck('server_id')
+                ->merge($applications->pluck('server_id'))
+                ->unique()
+                ->count(),
             'attention' => count($attention),
         ];
 
@@ -169,6 +197,35 @@ class ProjectController extends Controller
             'project' => $this->projectPayload($project),
             'resources' => $resources
                 ->map(fn (Resource $resource): array => $resourcePresenter->toArray($resource, $request->user()))
+                ->values()
+                ->all(),
+            'applications' => $applications
+                ->map(fn (Application $application): array => [
+                    'id' => $application->id,
+                    'name' => $application->name,
+                    'image' => $application->image,
+                    'status' => $application->status->value,
+                    'status_label' => $application->status->label(),
+                    'status_tone' => $application->status->tone(),
+                    'environment' => [
+                        'name' => $application->environment->name,
+                        'type_label' => $application->environment->type->label(),
+                    ],
+                    'server' => [
+                        'name' => $application->server->name,
+                    ],
+                    'host_port' => $application->host_port,
+                    'last_error' => $application->last_error,
+                    'latest_deployment' => $application->latestDeployment
+                        ? [
+                            'id' => $application->latestDeployment->id,
+                            'status' => $application->latestDeployment->status->value,
+                            'status_label' => $application->latestDeployment->status->label(),
+                            'status_tone' => $application->latestDeployment->status->tone(),
+                            'image' => $application->latestDeployment->image,
+                        ]
+                        : null,
+                ])
                 ->values()
                 ->all(),
             'servers' => $servers,
@@ -192,6 +249,7 @@ class ProjectController extends Controller
             'canManage' => Gate::allows('update', $project),
             'canDelete' => Gate::allows('delete', $project),
             'canCreateResource' => Gate::allows('create', [Resource::class, $project]),
+            'canCreateApplication' => Gate::allows('create', [Application::class, $project]),
         ]);
     }
 
@@ -201,14 +259,26 @@ class ProjectController extends Controller
     private function projectActivity(Project $project, int $limit): array
     {
         $resourceIds = $project->resources->pluck('id');
+        $applicationIds = $project->applications->pluck('id');
+        $deploymentIds = Deployment::query()
+            ->whereIn('application_id', $applicationIds)
+            ->pluck('id');
 
         return AuditLog::query()
             ->where('organization_id', $project->organization_id)
-            ->where(function ($query) use ($project, $resourceIds): void {
+            ->where(function ($query) use ($project, $resourceIds, $applicationIds, $deploymentIds): void {
                 $query->where('resource_id', $project->id);
 
                 if ($resourceIds->isNotEmpty()) {
                     $query->orWhereIn('resource_id', $resourceIds);
+                }
+
+                if ($applicationIds->isNotEmpty()) {
+                    $query->orWhereIn('resource_id', $applicationIds);
+                }
+
+                if ($deploymentIds->isNotEmpty()) {
+                    $query->orWhereIn('resource_id', $deploymentIds);
                 }
             })
             ->with('actor')
@@ -267,6 +337,10 @@ class ProjectController extends Controller
 
         if ($project->resources()->exists()) {
             return back()->with('error', 'Delete the project resources before deleting the project.');
+        }
+
+        if ($project->applications()->exists()) {
+            return back()->with('error', 'Delete the project applications before deleting the project.');
         }
 
         $auditLogger->record(
@@ -333,6 +407,10 @@ class ProjectController extends Controller
             return back()->with('error', 'Delete the environment resources before removing the environment.');
         }
 
+        if ($environment->applications()->exists()) {
+            return back()->with('error', 'Delete the environment applications before removing the environment.');
+        }
+
         $name = $environment->name;
         $environment->delete();
 
@@ -361,8 +439,14 @@ class ProjectController extends Controller
             'resource_count' => $project->resources->count(),
             'active_resource_count' => $project->resources->where('status', ResourceStatus::Active)->count(),
             'failed_resource_count' => $project->resources->where('status', ResourceStatus::Failed)->count(),
+            'application_count' => $project->applications->count(),
+            'active_application_count' => $project->applications->where('status', ApplicationStatus::Active)->count(),
+            'failed_application_count' => $project->applications->where('status', ApplicationStatus::Failed)->count(),
             'environment_count' => $project->environments->count(),
-            'server_count' => $project->resources->pluck('server_id')->unique()->count(),
+            'server_count' => $project->resources->pluck('server_id')
+                ->merge($project->applications->pluck('server_id'))
+                ->unique()
+                ->count(),
             'environments' => $project->environments
                 ->map(fn (Environment $environment): array => [
                     'id' => $environment->id,
@@ -375,6 +459,11 @@ class ProjectController extends Controller
                     'active_resource_count' => $project->resources
                         ->where('environment_id', $environment->id)
                         ->where('status', ResourceStatus::Active)
+                        ->count(),
+                    'application_count' => $project->applications->where('environment_id', $environment->id)->count(),
+                    'active_application_count' => $project->applications
+                        ->where('environment_id', $environment->id)
+                        ->where('status', ApplicationStatus::Active)
                         ->count(),
                 ])
                 ->values()

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/applications"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/metrics"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/protocol"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/resources"
@@ -104,6 +105,64 @@ func (f *fakeResources) InspectResource(_ context.Context, containerRef string) 
 	}
 
 	return f.state, nil
+}
+
+type fakeApplications struct {
+	deploySpec applications.Spec
+	endpoint   applications.Endpoint
+	state      applications.State
+	logs       string
+	err        error
+	calls      []string
+}
+
+func (f *fakeApplications) DeployApplication(_ context.Context, spec applications.Spec) (applications.Endpoint, error) {
+	f.calls = append(f.calls, "deploy")
+	f.deploySpec = spec
+
+	if f.err != nil {
+		return f.endpoint, f.err
+	}
+
+	return f.endpoint, nil
+}
+
+func (f *fakeApplications) StartApplication(_ context.Context, applicationID string, containerRef string) error {
+	f.calls = append(f.calls, "start:"+applicationID+":"+containerRef)
+
+	return f.err
+}
+
+func (f *fakeApplications) StopApplication(_ context.Context, applicationID string, containerRef string) error {
+	f.calls = append(f.calls, "stop:"+applicationID+":"+containerRef)
+
+	return f.err
+}
+
+func (f *fakeApplications) DeleteApplication(_ context.Context, applicationID string, containerRef string) error {
+	f.calls = append(f.calls, "delete:"+applicationID+":"+containerRef)
+
+	return f.err
+}
+
+func (f *fakeApplications) InspectApplication(_ context.Context, applicationID string, containerRef string, _ int) (applications.State, error) {
+	f.calls = append(f.calls, "inspect:"+applicationID+":"+containerRef)
+
+	if f.err != nil {
+		return applications.State{}, f.err
+	}
+
+	return f.state, nil
+}
+
+func (f *fakeApplications) ApplicationLogs(_ context.Context, applicationID string, containerRef string, _ int) (string, error) {
+	f.calls = append(f.calls, "logs:"+applicationID+":"+containerRef)
+
+	if f.err != nil {
+		return "", f.err
+	}
+
+	return f.logs, nil
 }
 
 type fakeCollector struct {
@@ -722,6 +781,239 @@ func TestExecutorStartsStopsAndDeletesAResource(t *testing.T) {
 	}
 }
 
+func TestExecutorDeploysAnApplication(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	manager := &fakeApplications{
+		endpoint: applications.Endpoint{
+			ApplicationID:            "01a1d058-8612-7209-9082-03adf0d11976",
+			DeploymentID:             "01a1d058-8612-7209-9082-03adf0d11977",
+			ContainerID:              "container-123",
+			ContainerName:            "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+			Host:                     "127.0.0.1",
+			Port:                     32780,
+			Status:                   "running",
+			Health:                   "healthy",
+			PreviousContainerRemoved: true,
+			Logs:                     "started",
+		},
+	}
+	executor, _ := testExecutor(t, runner, &fakeDocker{}, &fakeCollector{})
+	executor.SetApplicationManager(manager)
+
+	cmd := command("cmd-deploy", OperationApplicationDeploy, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"application_id":          "01a1d058-8612-7209-9082-03adf0d11976",
+		"deployment_id":           "01a1d058-8612-7209-9082-03adf0d11977",
+		"container_name":          "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+		"previous_container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-00000000",
+		"image":                   "nginx:1.27-alpine",
+		"container_port":          float64(80),
+		"health_path":             "/",
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(manager.calls) != 1 || manager.calls[0] != "deploy" {
+		t.Fatalf("unexpected application calls %#v", manager.calls)
+	}
+
+	if manager.deploySpec.Image != "nginx:1.27-alpine" || manager.deploySpec.ContainerPort != 80 ||
+		manager.deploySpec.PreviousContainerName != "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-00000000" {
+		t.Fatalf("unexpected deploy spec %#v", manager.deploySpec)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeCompleted {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	result := runner.results[0].Result.Result
+	if result["port"] != 32780 || result["health"] != "healthy" || result["logs"] != "started" ||
+		result["previous_container_removed"] != true {
+		t.Fatalf("unexpected application result %#v", result)
+	}
+}
+
+func TestExecutorReportsApplicationDeployFailureWithLogs(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	manager := &fakeApplications{
+		endpoint: applications.Endpoint{
+			ApplicationID: "01a1d058-8612-7209-9082-03adf0d11976",
+			DeploymentID:  "01a1d058-8612-7209-9082-03adf0d11977",
+			Health:        "unhealthy",
+			Logs:          "listen tcp: address already in use",
+		},
+		err: errors.New("the application did not become healthy within 60 seconds"),
+	}
+	executor, _ := testExecutor(t, runner, &fakeDocker{}, &fakeCollector{})
+	executor.SetApplicationManager(manager)
+
+	cmd := command("cmd-deploy-failure", OperationApplicationDeploy, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"application_id": "01a1d058-8612-7209-9082-03adf0d11976",
+		"deployment_id":  "01a1d058-8612-7209-9082-03adf0d11977",
+		"container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+		"image":          "nginx:1.27-alpine",
+		"container_port": float64(80),
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeFailed {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if !strings.Contains(runner.results[0].Result.ErrorMessage, "did not become healthy") {
+		t.Fatalf("unexpected error %q", runner.results[0].Result.ErrorMessage)
+	}
+
+	if runner.results[0].Result.Result["logs"] != "listen tcp: address already in use" {
+		t.Fatalf("the failed deployment logs were not reported: %#v", runner.results[0].Result.Result)
+	}
+}
+
+func TestExecutorRunsApplicationLifecycleCommands(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	manager := &fakeApplications{
+		state: applications.State{
+			Status:      "running",
+			ContainerID: "container-123",
+			Port:        32780,
+			Health:      "healthy",
+			Image:       "nginx:1.27-alpine",
+		},
+		logs: "line one\n",
+	}
+	executor, _ := testExecutor(t, runner, &fakeDocker{}, &fakeCollector{})
+	executor.SetApplicationManager(manager)
+
+	payload := map[string]any{
+		"application_id": "01a1d058-8612-7209-9082-03adf0d11976",
+		"container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+		"container_port": float64(80),
+	}
+
+	for _, operation := range []string{
+		OperationApplicationStart,
+		OperationApplicationStop,
+		OperationApplicationInspect,
+		OperationApplicationLogs,
+		OperationApplicationDelete,
+	} {
+		cmd := command("cmd-"+operation, operation, testNow.Add(time.Minute))
+		cmd.Payload = payload
+
+		if err := executor.Handle(context.Background(), cmd); err != nil {
+			t.Fatalf("%s: %v", operation, err)
+		}
+	}
+
+	if len(manager.calls) != 5 {
+		t.Fatalf("unexpected application calls %#v", manager.calls)
+	}
+
+	if manager.calls[2] != "inspect:01a1d058-8612-7209-9082-03adf0d11976:cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678" {
+		t.Fatalf("unexpected inspect call %q", manager.calls[2])
+	}
+
+	if len(runner.results) != 5 {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	inspectResult := runner.results[2].Result.Result
+	if inspectResult["status"] != "running" || inspectResult["port"] != 32780 || inspectResult["health"] != "healthy" {
+		t.Fatalf("unexpected inspect result %#v", inspectResult)
+	}
+
+	logResult := runner.results[3].Result.Result
+	if logResult["logs"] != "line one\n" {
+		t.Fatalf("unexpected logs result %#v", logResult)
+	}
+}
+
+func TestHandleRecoversAnInterruptedApplicationDeploy(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	manager := &fakeApplications{
+		endpoint: applications.Endpoint{
+			ApplicationID: "01a1d058-8612-7209-9082-03adf0d11976",
+			DeploymentID:  "01a1d058-8612-7209-9082-03adf0d11977",
+			ContainerID:   "container-123",
+			Host:          "127.0.0.1",
+			Port:          32780,
+			Status:        "running",
+			Health:        "healthy",
+			Logs:          "recovered",
+		},
+	}
+	executor, store := testExecutor(t, runner, &fakeDocker{}, &fakeCollector{})
+	executor.SetApplicationManager(manager)
+
+	if err := store.Put(Outcome{
+		CommandID:   "cmd-deploy-interrupted",
+		Operation:   OperationApplicationDeploy,
+		Status:      OutcomeExecuting,
+		CompletedAt: testNow.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+
+	cmd := command("cmd-deploy-interrupted", OperationApplicationDeploy, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"application_id": "01a1d058-8612-7209-9082-03adf0d11976",
+		"deployment_id":  "01a1d058-8612-7209-9082-03adf0d11977",
+		"container_name": "cloudforge-app-01a1d058-8612-7209-9082-03adf0d11976-12345678",
+		"image":          "nginx:1.27-alpine",
+		"container_port": float64(80),
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(manager.calls) != 1 || manager.calls[0] != "deploy" {
+		t.Fatalf("expected an idempotent deploy retry, got %#v", manager.calls)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeCompleted {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if runner.results[0].Result.Result["logs"] != "recovered" {
+		t.Fatalf("unexpected recovered result %#v", runner.results[0].Result.Result)
+	}
+}
+
+func TestExecutorRejectsApplicationCommandsWithoutAManager(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	executor, _ := testExecutor(t, runner, &fakeDocker{}, &fakeCollector{})
+
+	cmd := command("cmd-deploy-no-manager", OperationApplicationDeploy, testNow.Add(time.Minute))
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeFailed {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if !strings.Contains(runner.results[0].Result.ErrorMessage, "not configured") {
+		t.Fatalf("unexpected error %q", runner.results[0].Result.ErrorMessage)
+	}
+}
 func TestExecutorReportsResourceManagerFailures(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Domains\Applications\Models\Application;
 use App\Domains\Infrastructure\Models\Server;
 use App\Domains\Infrastructure\Services\AgentRequestVerifier;
 use App\Domains\Infrastructure\Services\DockerSocketProbe;
@@ -11,6 +12,7 @@ use App\Domains\Organizations\Models\Organization;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Resources\Models\Resource;
 use App\Policies\AgentCommandPolicy;
+use App\Policies\ApplicationPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ResourcePolicy;
@@ -42,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Server::class, ServerPolicy::class);
         Gate::policy(Project::class, ProjectPolicy::class);
         Gate::policy(Resource::class, ResourcePolicy::class);
+        Gate::policy(Application::class, ApplicationPolicy::class);
         Gate::policy(Organization::class, OrganizationPolicy::class);
         Gate::policy(AgentCommand::class, AgentCommandPolicy::class);
 

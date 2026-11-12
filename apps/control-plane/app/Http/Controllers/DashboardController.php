@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Domains\Applications\Enums\ApplicationStatus;
+use App\Domains\Applications\Models\Application;
 use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Resources\Enums\ResourceStatus;
 use App\Support\OrganizationContext;
@@ -31,7 +33,13 @@ class DashboardController extends Controller
             ->latest()
             ->get();
 
+        $applications = $organization->applications()
+            ->with(['project', 'environment', 'server', 'latestDeployment'])
+            ->latest()
+            ->get();
+
         $failedResources = $resources->where('status', ResourceStatus::Failed);
+        $failedApplications = $applications->where('status', ApplicationStatus::Failed);
         $attention = collect();
 
         $servers
@@ -58,11 +66,22 @@ class DashboardController extends Controller
             ]);
         });
 
+        $failedApplications->take(5)->each(function (Application $application) use ($attention): void {
+            $attention->push([
+                'id' => 'application-'.$application->id,
+                'tone' => 'danger',
+                'title' => "{$application->name} failed",
+                'description' => $application->last_error ?: 'The application deployment is not healthy.',
+                'href' => "/projects/{$application->project_id}/applications/{$application->id}",
+            ]);
+        });
+
         return Inertia::render('Dashboard', [
             'stats' => [
                 'servers' => $servers->count(),
                 'healthy' => $servers->filter(fn ($server): bool => $server->status->isReachable())->count(),
                 'projects' => $organization->projects()->count(),
+                'applications' => $applications->count(),
                 'databases' => $resources->count(),
                 'members' => $organization->memberships()->where('status', 'active')->count(),
             ],
@@ -70,6 +89,11 @@ class DashboardController extends Controller
                 'active' => $resources->where('status', ResourceStatus::Active)->count(),
                 'failed' => $failedResources->count(),
                 'provisioning' => $resources->where('status', ResourceStatus::Provisioning)->count(),
+            ],
+            'applicationStats' => [
+                'active' => $applications->where('status', ApplicationStatus::Active)->count(),
+                'failed' => $failedApplications->count(),
+                'deploying' => $applications->where('status', ApplicationStatus::Deploying)->count(),
             ],
             'attention' => $attention->take(6)->values()->all(),
             'statusCounts' => $statusCounts,

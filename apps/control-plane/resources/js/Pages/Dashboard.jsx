@@ -34,6 +34,7 @@ function AttentionItem({ item }) {
 export default function Dashboard({
     stats,
     resourceStats = { active: 0, failed: 0, provisioning: 0 },
+    applicationStats = { active: 0, failed: 0, deploying: 0 },
     attention = [],
     statusCounts,
     servers,
@@ -45,7 +46,7 @@ export default function Dashboard({
     return (
         <AppLayout
             title="Overview"
-            description="Live infrastructure, managed databases and privileged activity for this organization."
+            description="Live infrastructure, applications, managed databases and privileged activity for this organization."
             eyebrow="Control plane"
             actions={
                 <>
@@ -62,7 +63,7 @@ export default function Dashboard({
         >
             <Head title="Overview" />
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 <StatCard
                     label="Servers"
                     value={stats.servers ?? 0}
@@ -76,6 +77,13 @@ export default function Dashboard({
                     caption="delivery units"
                     icon="boxes"
                     tone="neutral"
+                />
+                <StatCard
+                    label="Applications"
+                    value={stats.applications ?? 0}
+                    caption={`${applicationStats.active} active`}
+                    icon="activity"
+                    tone={applicationStats.failed > 0 ? 'danger' : 'success'}
                 />
                 <StatCard
                     label="Databases"

@@ -265,6 +265,10 @@ class ServerController extends Controller
             return back()->with('error', 'Delete the resources hosted on this server before removing it.');
         }
 
+        if ($server->applications()->exists()) {
+            return back()->with('error', 'Delete the applications hosted on this server before removing it.');
+        }
+
         $auditLogger->record(AuditAction::ServerDeleted, $organization, $server, ['name' => $server->name], $request->user());
 
         $server->certificates()->whereNull('revoked_at')->update([

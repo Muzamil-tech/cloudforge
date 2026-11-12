@@ -1,10 +1,28 @@
 # Phase 2 plan — application deployments
 
-**Status:** Draft for implementation
-**Version:** 1.3.0 target
+**Status:** First slice implemented in code; real VPS acceptance pending
+**Version:** 1.3.0
 **First slice:** prebuilt Docker image deployments
 **Owner:** CloudForge
 **Last updated:** 2026-11-12
+
+### Implementation status
+
+- Schema, enums, models and factories: implemented.
+- Agent image validation, mirror-first pull, deployment rollout, health checks,
+  label-verified start/stop/inspect/logs/delete and log demultiplexing:
+  implemented with Go tests.
+- Typed executor operations and interrupted-deploy replay: implemented with Go
+  tests.
+- Control-plane create/deploy/rollback/start/stop/refresh/delete actions, command
+  result handling, reconciliation, policies and audit: implemented with PHP
+  tests.
+- Applications tab, create form, application detail, deployment history, logs,
+  rollback, polling and actions: implemented; frontend build passes.
+- Real VPS acceptance: **not yet performed**. The checklist in section 13 remains
+  open.
+- GitHub import, BuildKit, environment variables, live logs, domains and workers:
+  not implemented.
 
 ---
 
@@ -334,16 +352,17 @@ Payload: `application_id`, `container_name`, `container_id` (optional).
 
 #### `application.delete`
 
-Payload: `application_id`, `container_name`, `container_id` (optional).
+Payload: `application_id`, `container_name` (optional), `container_id` (optional).
 
 - Verify labels.
-- Force-remove the container.
-- Missing container is success.
+- Force-remove every container with the application label, including orphaned
+  containers from an earlier failed deployment.
+- Missing containers are success.
 - No volume is removed in this slice.
 
 #### `application.inspect`
 
-Payload: `application_id`, `container_name`.
+Payload: `application_id`, `container_name`, `container_port`.
 
 Result: `status` (`running`, `stopped`, `missing`), `container_id`, `port`,
 `health`, `image`.
@@ -562,7 +581,7 @@ Fields:
 
 - name;
 - image (required, with example placeholder);
-- container port (default 3000);
+- container port (default 80 for the example `nginx` image);
 - health path (optional, placeholder `/up`);
 - environment;
 - server.
@@ -741,7 +760,7 @@ Do not start step 7 until steps 2–6 have real backend behavior and tests.
 
 | Decision | Default for this slice |
 | --- | --- |
-| Default container port | `3000`, editable |
+| Default container port | `80` for the example `nginx` image; editable |
 | Health path | Optional; no path means running + Docker health if present |
 | Rollout strategy | New container first, remove old after health |
 | Host binding | `127.0.0.1` only |

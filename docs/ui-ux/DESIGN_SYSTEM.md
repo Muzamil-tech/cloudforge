@@ -69,6 +69,7 @@ not the only signal.
 | Page section | `Components/PageSection.jsx` | title, description, actions, body |
 | Stat card | `Components/StatCard.jsx` | real number, caption and icon |
 | Credentials | `Components/ResourceCredentials.jsx` | audited credential view, copy URL/password |
+| Project tabs | `Components/ProjectTabs.jsx` | one active section, real links, horizontal scroll |
 | Breadcrumbs | `Components/Breadcrumbs.jsx` | route-aware, no dead links |
 | Theme toggle | `Components/ThemeToggle.jsx` | sun/moon, persists preference |
 | User menu | `Components/UserMenu.jsx` | keyboard dismiss, settings and sign out |

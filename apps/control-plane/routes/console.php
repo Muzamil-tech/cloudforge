@@ -10,6 +10,10 @@ Schedule::command('resources:reconcile')
     ->everyMinute()
     ->withoutOverlapping(5);
 
+Schedule::command('applications:reconcile')
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
 Schedule::command('metrics:prune')
     ->dailyAt('03:15')
     ->withoutOverlapping(30);

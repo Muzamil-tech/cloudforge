@@ -98,24 +98,30 @@ or token from the dashboard.
 | 32 | Stuck resource recovery | Reconcile fails commandless resources, expires the command ledger with the resource, reports waiting operations, bounded scheduler overlap locks | `ResourceProvisioningTest` reconcile tests | Tested locally. |
 | 33 | Resource state refresh | Typed `resource.inspect` command and `Refreshing` transition; missing status import fixed | `ResourceProvisioningTest` refresh test | Tested locally. |
 | 34 | Credential recovery | Idempotent create, password recovery from the container configuration, replay recovery, Recover credentials / Retry provisioning actions, start guard | Go Docker and executor tests; `ResourceProvisioningTest` | Tested locally against fake Docker responses. Real recovery unverified on a VPS. |
+| 35 | Application schema and models | `applications`, `deployments`, `deployment_events`, status enums, factories and relations | `ApplicationDeploymentTest`; migrations | Tested locally. |
+| 36 | Application agent deployment | Mirror-first application image pulls, new-container rollout, HTTP and Docker health checks, previous-container removal, bounded log demux, label-verified lifecycle operations | Go Docker tests | Tested locally against fake Docker responses. Real container rollout unverified. |
+| 37 | Application executor operations | `application.deploy/start/stop/delete/inspect/logs`, typed payload parsing, idempotent interrupted-deploy replay | Go executor tests | Tested locally. |
+| 38 | Application control plane | Create, deploy, rollback, start, stop, refresh, delete, command-result handling, events, policies and audit | `ApplicationDeploymentTest` | Tested locally. |
+| 39 | Application reconciliation and UI | `applications:reconcile`, project Applications tab, create form, detail page, deployment history, logs, rollback and polling | `ApplicationDeploymentTest`; `npm run build` | Tested locally. No real VPS deployment yet. |
 
 ### Command evidence
 
 | Command | Result |
 | --- | --- |
 | `vendor/bin/pint --format agent` | Formatted four files; the rerun reports `passed`. |
-| `php artisan test --compact` | Final full run: 203 tests passed, 1,562 assertions, 233.3 seconds. |
+| `php artisan test --compact` | Final full run: 218 tests passed, 1,707 assertions, 383.2 seconds. |
 | `php artisan test --compact tests/Feature/InstallerScriptTest.php tests/Feature/BootstrapCommandTest.php` | 12 tests passed, 57 assertions after the final shell edits. |
 | `bash -n install.sh` | Parsed without error. |
 | `bash tests/shell/one_command_installer_test.sh install.sh` | 20 assertions, 0 failures. |
 | `sh tests/shell/installer_test.sh` | 35 assertions, 0 failures, 2 skipped mode/execute-bit checks on Windows. |
 | `php artisan test --compact tests/Feature/ResourceProvisioningTest.php tests/Feature/AgentCommandTest.php` | 28 tests passed, 213 assertions. |
 | `php artisan test --compact tests/Feature/ResourceProvisioningTest.php` | 23 tests passed, 217 assertions after the refresh and recovery changes. |
-| `go test ./internal/docker ./internal/commands` | Passed, including managed resource creation, deletion, executor payload tests, mirror-first registry fallback, idempotent container recovery and replay credential recovery. |
+| `php artisan test --compact tests/Feature/ApplicationDeploymentTest.php` | 15 tests passed, 145 assertions covering creation, deploy results, failed rollout recovery, rollback, lifecycle, reconciliation, permissions, validation and pages. |
+| `go test ./internal/docker ./internal/commands` | Passed, including managed resource creation, deletion, executor payload tests, mirror-first application pulls, health-check rollout, log demux, label verification and replay recovery. |
 | `go test ./...` | All packages passed; `internal/agent` 4.2s, `internal/client` 6.2s, `internal/enrollment` 6.7s. |
 | `go vet ./...` | No findings. |
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
-| `npm run build` | Vite 8.3.8 built 617 modules; lazy page chunks, main JS 361.61 kB (gzip 112.96 kB), CSS 87.02 kB (gzip 16.80 kB). |
+| `npm run build` | Vite 8.3.8 built 620 modules; lazy page chunks, main JS 361.98 kB (gzip 113.08 kB), CSS 87.48 kB (gzip 16.89 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
 | `VERSION=1.2.1 sh packaging/package.sh` | Built the mirror-first agent archives and `SHA256SUMS`. |
 | `VERSION=1.2.2 sh packaging/package.sh` | Built the credential-recovery agent archives and `SHA256SUMS`. |
@@ -172,15 +178,24 @@ These are deliberate gaps, not hidden failures:
 - No real Docker daemon. The agent's Docker client is tested against a fake
   server over a Unix socket; real `/version` and `/info` responses, permissions
   and rootless detection are unverified.
-- The resource layer has never created a real container. Docker image pull,
-  loopback port binding, persistent volumes, credential use and deletion are
-  unverified on a VPS.
+- The resource layer has run on the owner's VPS, but the formal acceptance
+  evidence for image pulls, volumes, credentials and deletion is not recorded.
+- No real application deployment has completed on a VPS. The new application
+  rollout, health check, previous-container replacement, rollback and logs are
+  tested against fake Docker responses only.
 - The agent executes one command at a time. A slow image pull delays queued
-  start, stop and delete commands; the pull is now bounded, but there is no
-  concurrent command execution.
+  start, stop, delete and application commands; pulls are bounded, but there is
+  no concurrent command execution.
 - Reachability of `mirror.gcr.io`, Docker Hub and `public.ecr.aws` from the
   target VPS is unverified. The agent logs each registry attempt so the actual
   path can be checked from the journal.
+- Application images must be publicly pullable. Registry credentials, private
+  registries, environment variables, persistent volumes, resource limits,
+  custom domains and live log streaming are not implemented.
+- Application containers use the image's default user and capabilities. They
+  receive `no-new-privileges`, no mounts, no privileged flag and no host
+  network, but there are no CPU/memory limits, read-only root filesystem or
+  capability drop yet.
 - No MySQL resource, application attachment, backup or restore is implemented.
 - No real DNS or TLS. Enrollment over a public HTTPS endpoint, certificate
   chains, reverse-proxy client-certificate forwarding and rate limiting behind a
@@ -188,7 +203,7 @@ These are deliberate gaps, not hidden failures:
 - No real browser session. Inertia responses and props are asserted in feature
   tests; no browser click-through or visual review was performed.
 - No three-node enrollment; the Phase 1 acceptance criterion remains open.
-- Release assets `v1.2.2` are published, but the installer's live download path
+- Release assets `v1.3.0` are published, but the installer's live download path
   has not been exercised from a VPS.
 - `agent.env` mode `0600` could not be confirmed on Windows; the harness skips
   that assertion. Linux CI must run it.
@@ -208,9 +223,10 @@ plan is in [`PHASE_2_PLAN.md`](PHASE_2_PLAN.md). Phase 1 acceptance remains open
 Phase 2 code is not to be marked "verified in real infrastructure" until the VPS
 acceptance run in that plan is recorded here.
 
-- Milestone 2 first slice: in progress — application schema, typed agent
-  deploy/start/stop/delete/inspect operations, health checks, deployment history
-  and bounded logs.
+- Milestone 2 first slice: **implemented in code** — application schema, typed
+  agent deploy/start/stop/delete/inspect operations, mirror-first image pulls,
+  health checks, deployment history, bounded logs, rollback and reconciliation.
+  Local PHP and Go tests pass. Real VPS deployment acceptance is still pending.
 - Milestone 2 GitHub import, BuildKit, environment variables and live logs: not
   started.
 - Milestones 3–8: not started. Their prerequisites and acceptance criteria remain
