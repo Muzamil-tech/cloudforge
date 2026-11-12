@@ -150,7 +150,7 @@ class ResourceController extends Controller
         Gate::authorize('reveal', $resource);
 
         if (! $resource->canRevealCredentials()) {
-            return back()->with('error', 'These credentials have already been revealed or are not ready yet.');
+            return back()->with('error', 'Credentials are not ready for this resource.');
         }
 
         $password = $resource->password;

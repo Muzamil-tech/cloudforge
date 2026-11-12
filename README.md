@@ -21,7 +21,7 @@ enrollment, certificate rotation, heartbeats, inventory, metrics, durable
 commands and audit log are in place.
 
 The first database-resource slice is now in place: managed PostgreSQL and Redis
-containers are provisioned through the agent, with one-time credentials,
+containers are provisioned through the agent, with encrypted credentials,
 start/stop/delete and live state. MySQL and application deployment remain later
 milestones.
 

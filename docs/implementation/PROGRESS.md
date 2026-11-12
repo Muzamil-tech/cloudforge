@@ -88,7 +88,7 @@ or token from the dashboard.
 | 22 | Real Docker inventory | Agent talks to a real Docker daemon | Fake Docker server tests only | **Not verified.** No Docker available. |
 | 23 | One-command clean-VPS installation | Root `install.sh` provisions PHP, PostgreSQL, Redis, Nginx, Node, Docker, Composer, TLS, the dashboard, scheduler, queue worker and the source-built agent | `InstallerScriptTest`; `one_command_installer_test.sh`; `installer_test.sh` | Tested locally. No clean VPS run. |
 | 24 | PostgreSQL and Redis resource provisioning | `resources` domain, typed `resource.*` agent commands, Docker image pull and container lifecycle | `ResourceProvisioningTest`; Go Docker and executor tests | Tested locally against a fake Docker API. No real Docker run. |
-| 25 | One-time database credentials | Encrypted resource password, one-time reveal, command-result redaction | `ResourceProvisioningTest` credential and agent-result tests | Tested locally. |
+| 25 | Audited database credentials | Encrypted resource password, authorized repeated credential viewing, command-result redaction | `ResourceProvisioningTest` credential and agent-result tests | Tested locally. |
 | 26 | Resource lifecycle and recovery | Start, stop, delete, inspect, scheduled reconciliation | `ResourceProvisioningTest`; `ReconcileResources` | Tested locally. |
 | 27 | MySQL, application attachment and backups | Not implemented | None | **Not started.** |
 | 28 | Product UI shell and design foundation | Theme tokens, collapsible sidebar, breadcrumbs, account menu, shared cards/stats/credentials, responsive drawer | `DatabasesIndex`/dashboard feature tests; `npm run build` | Tested locally. No browser E2E or formal contrast audit. |

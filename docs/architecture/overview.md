@@ -271,8 +271,8 @@ organization server:
 4. The agent returns the generated credentials once. The control plane encrypts
    them in the resource row, marks the resource active and removes the password
    from the generic agent command result.
-5. A developer can reveal the credentials once from the project page. Start,
-   stop, delete and refresh are separate typed commands.
+5. An authorized developer can view the credentials from the project page; every
+   view is audited. Start, stop, delete and refresh are separate typed commands.
 6. `resources:reconcile` runs every minute and fails a resource whose command
    expired or completed without a usable result.
 

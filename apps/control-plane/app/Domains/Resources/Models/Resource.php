@@ -103,7 +103,6 @@ class Resource extends Model
     public function canRevealCredentials(): bool
     {
         return $this->status === ResourceStatus::Active
-            && $this->password !== null
-            && ! $this->isRevealed();
+            && $this->password !== null;
     }
 }

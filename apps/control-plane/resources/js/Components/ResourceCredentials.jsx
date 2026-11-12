@@ -13,7 +13,8 @@ export function ResourceCredentials({ credentials }) {
                 <div>
                     <p className="text-sm font-semibold text-success">Credentials for {credentials.name}</p>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                        These credentials are shown once. Copy them now. They will not be shown again.
+                        Only authorized organization members can view these credentials. Every view is audited.
+                        Copy them carefully.
                     </p>
                 </div>
             </div>

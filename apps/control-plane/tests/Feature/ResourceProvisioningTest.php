@@ -105,7 +105,7 @@ class ResourceProvisioningTest extends TestCase
         ]);
     }
 
-    public function test_credentials_are_revealed_once_from_the_project_route(): void
+    public function test_credentials_can_be_viewed_repeatedly_by_authorized_users(): void
     {
         [$owner, $organization, $project, $server] = $this->context();
 
@@ -120,17 +120,13 @@ class ResourceProvisioningTest extends TestCase
         $response->assertRedirect();
         $this->assertSame('reveal-secret', session('resource_credentials.password'));
         $this->assertNotNull($resource->refresh()->credentials_revealed_at);
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => AuditAction::ResourceCredentialsRevealed->value,
-            'organization_id' => $organization->id,
-        ]);
 
         $second = $this->actingIn($organization, $owner)
             ->post(route('resources.reveal', [$project, $resource]));
 
         $second->assertRedirect();
-        $this->assertNull(session('resource_credentials'));
-        $this->assertSame('These credentials have already been revealed or are not ready yet.', session('error'));
+        $this->assertSame('reveal-secret', session('resource_credentials.password'));
+        $this->assertDatabaseCount('audit_logs', 2);
     }
 
     public function test_start_stop_and_delete_are_agent_driven(): void

@@ -70,8 +70,8 @@ deployment dashboard would violate the no-fake-features rule.
 3. Real-data dashboard with fleet health, attention queue, managed databases and
    recent activity.
 4. Organization-wide Databases view with real PostgreSQL/Redis resources,
-   search, engine/status filters, sorting, lifecycle actions and one-time
-   credentials.
+   search, engine/status filters, sorting, lifecycle actions and audited
+   credential viewing.
 5. Projects listing with real database/environment/server counts, search,
    sorting and a compact creation panel.
 6. Project workspace with Overview, Databases, Environments, Activity and

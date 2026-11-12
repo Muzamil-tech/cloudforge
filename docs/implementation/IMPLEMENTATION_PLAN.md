@@ -267,11 +267,11 @@ one-click provisioning; credential generation and encrypted storage; attachment
 to applications; private networking; backups.
 **First slice delivered:** PostgreSQL 16 and Redis 7 containers are provisioned
 through typed agent Docker operations, bound to loopback, with persistent
-volumes, encrypted one-time credentials, start/stop/delete/refresh and
+volumes, encrypted credentials, start/stop/delete/refresh and
 reconciliation. MySQL, application attachment, shared clusters and backups
 remain.
 **Acceptance:** creating a PostgreSQL instance produces a real running database,
-credentials are shown once, an application receives working connection
+credentials are available to authorized members and every view is audited, an application receives working connection
 variables, and deletion/backup restore behave correctly.
 **Status:** In progress. PostgreSQL/Redis control-plane and agent code is tested
 locally; real Docker container creation, image pulls and credential use are not

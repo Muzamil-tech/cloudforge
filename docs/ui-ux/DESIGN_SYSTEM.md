@@ -68,7 +68,7 @@ not the only signal.
 | Empty state | `Components/EmptyState.jsx` | explain the resource and offer a real action |
 | Page section | `Components/PageSection.jsx` | title, description, actions, body |
 | Stat card | `Components/StatCard.jsx` | real number, caption and icon |
-| Credentials | `Components/ResourceCredentials.jsx` | one-time reveal, copy URL/password |
+| Credentials | `Components/ResourceCredentials.jsx` | audited credential view, copy URL/password |
 | Breadcrumbs | `Components/Breadcrumbs.jsx` | route-aware, no dead links |
 | Theme toggle | `Components/ThemeToggle.jsx` | sun/moon, persists preference |
 | User menu | `Components/UserMenu.jsx` | keyboard dismiss, settings and sign out |

@@ -254,7 +254,7 @@ export default function DatabasesIndex({ resources = [], resourceTypes = [], can
                                                 {resource.can_reveal ? (
                                                     <button type="button" onClick={() => reveal(resource)} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
                                                         <Icon name="key" size={12} />
-                                                        Credentials
+                                                        {resource.credentials_revealed ? 'View credentials' : 'Credentials'}
                                                     </button>
                                                 ) : null}
                                                 {resource.can_start ? (

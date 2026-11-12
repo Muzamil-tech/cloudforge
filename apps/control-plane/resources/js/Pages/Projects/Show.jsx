@@ -92,7 +92,7 @@ function ResourceRow({ resource, onAction, onReveal, onRemove }) {
                 {resource.can_reveal ? (
                     <button type="button" onClick={() => onReveal(resource)} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
                         <Icon name="key" size={12} />
-                        Credentials
+                        {resource.credentials_revealed ? 'View credentials' : 'Credentials'}
                     </button>
                 ) : null}
                 {resource.can_start ? (
