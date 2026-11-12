@@ -454,7 +454,7 @@ func (c *Client) prepareImage(ctx context.Context, kind resources.Kind, image st
 func (c *Client) imageExists(ctx context.Context, image string) (bool, error) {
 	var ignored struct{}
 
-	err := c.request(ctx, http.MethodGet, "/images/"+url.PathEscape(image)+"/json", nil, &ignored)
+	err := c.request(ctx, http.MethodGet, "/images/"+escapedImagePath(image)+"/json", nil, &ignored)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -464,6 +464,13 @@ func (c *Client) imageExists(ctx context.Context, image string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// escapedImagePath keeps repository slashes in the Docker image path. Docker's
+// image endpoints use a wildcard path parameter for names such as
+// mirror.gcr.io/library/nginx:1.27, so an escaped %2F is not equivalent.
+func escapedImagePath(image string) string {
+	return strings.ReplaceAll(url.PathEscape(image), "%2F", "/")
 }
 
 func imageCandidates(kind resources.Kind, image string) []string {

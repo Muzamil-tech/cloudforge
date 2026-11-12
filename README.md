@@ -41,7 +41,7 @@ logs, redeploy, roll back, start, stop and delete. GitHub import, BuildKit build
 and environment variables are later slices.
 
 Existing installations must rerun the installer to update the control plane and
-agent to the application-capable build (`v1.3.0` or later).
+agent to the application-capable build (`v1.3.1` or later).
 
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
@@ -123,10 +123,10 @@ go build -o cloudforge-agent ./cmd/cloudforge-agent
 Release archives are published as GitHub releases:
 
 ```sh
-VERSION=1.3.0 sh packaging/package.sh
+VERSION=1.3.1 sh packaging/package.sh
 ```
 
-Release `v1.3.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
+Release `v1.3.1` contains `cloudforge-agent_linux_amd64.tar.gz`,
 `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
 `Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
 release automatically.

@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 
-const tabs = [
+export const projectTabs = [
     { key: 'overview', label: 'Overview', href: (id) => `/projects/${id}` },
     { key: 'applications', label: 'Applications', href: (id) => `/projects/${id}/applications` },
     { key: 'databases', label: 'Databases', href: (id) => `/projects/${id}/databases` },
@@ -12,7 +12,7 @@ const tabs = [
 export function ProjectTabs({ project, active }) {
     return (
         <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-line" aria-label="Project sections">
-            {tabs.map((item) => {
+            {projectTabs.map((item) => {
                 const isActive = item.key === active;
 
                 return (

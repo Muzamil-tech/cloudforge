@@ -5,7 +5,7 @@ import { ConfirmDialog } from '../../Components/ConfirmDialog';
 import { EmptyState } from '../../Components/EmptyState';
 import { Icon } from '../../Components/Icons';
 import { PageSection } from '../../Components/PageSection';
-import { ProjectTabs } from '../../Components/ProjectTabs';
+import { ProjectTabs, projectTabs } from '../../Components/ProjectTabs';
 import { ResourceCredentials } from '../../Components/ResourceCredentials';
 import { StatCard } from '../../Components/StatCard';
 import { StatusBadge } from '../../Components/StatusBadge';
@@ -275,7 +275,7 @@ export default function ProjectsShow({
         });
     }
 
-    const activeTab = tabs.find((item) => item.key === tab) ?? tabs[0];
+    const activeTab = projectTabs.find((item) => item.key === tab) ?? projectTabs[0];
 
     return (
         <AppLayout
