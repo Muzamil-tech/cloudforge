@@ -383,6 +383,31 @@ class ResourceProvisioningTest extends TestCase
                 ->where('projects.0.environment_count', 1));
     }
 
+    public function test_a_provisioning_resource_can_be_deleted_to_recover_from_a_stuck_command(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = app(CreateResource::class)->execute(
+            $project,
+            $project->environments()->firstOrFail(),
+            $server,
+            'stuck-db',
+            ResourceType::Postgresql,
+            $owner,
+        );
+
+        $this->assertSame(ResourceStatus::Provisioning, $resource->status);
+        $this->assertTrue($resource->status->canDelete());
+
+        app(DeleteResource::class)->execute($resource, $owner);
+
+        $this->assertSame(ResourceStatus::Deleting, $resource->refresh()->status);
+        $this->assertDatabaseHas('agent_commands', [
+            'server_id' => $server->id,
+            'operation' => AgentOperation::ResourceDelete->value,
+        ]);
+    }
+
     public function test_viewers_cannot_provision_resources(): void
     {
         [$owner, $organization, $project, $server] = $this->context();

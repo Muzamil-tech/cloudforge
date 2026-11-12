@@ -62,7 +62,7 @@ enum ResourceStatus: string
 
     public function canDelete(): bool
     {
-        return in_array($this, [self::Active, self::Stopped, self::Failed], true);
+        return in_array($this, [self::Provisioning, self::Active, self::Stopped, self::Failed], true);
     }
 
     public function isDeleted(): bool
