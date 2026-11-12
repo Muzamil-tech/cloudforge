@@ -1,0 +1,193 @@
+@import '@fontsource/instrument-sans/latin-400.css';
+@import '@fontsource/instrument-sans/latin-500.css';
+@import '@fontsource/instrument-sans/latin-600.css';
+@import '@fontsource/instrument-sans/latin-700.css';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../js/**/*.jsx';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --color-canvas: var(--cf-bg);
+    --color-surface: var(--cf-surface);
+    --color-surface-raised: var(--cf-surface-raised);
+    --color-line: var(--cf-line);
+    --color-line-strong: var(--cf-line-strong);
+    --color-ink: var(--cf-text);
+    --color-muted: var(--cf-muted);
+    --color-faint: var(--cf-faint);
+    --color-accent: var(--cf-accent);
+    --color-accent-strong: var(--cf-accent-strong);
+    --color-accent-soft: var(--cf-accent-soft);
+    --color-danger: var(--cf-danger);
+    --color-warning: var(--cf-warning);
+    --color-success: var(--cf-success);
+}
+
+:root {
+    --cf-bg: #f5f4f0;
+    --cf-surface: #fbfaf7;
+    --cf-surface-raised: #ffffff;
+    --cf-line: #e2e0d9;
+    --cf-line-strong: #cbc8be;
+    --cf-text: #171a1c;
+    --cf-muted: #5d656c;
+    --cf-faint: #8b9298;
+    --cf-accent: #0f766e;
+    --cf-accent-strong: #0b5f59;
+    --cf-accent-soft: rgba(15, 118, 110, 0.1);
+    --cf-danger: #b42318;
+    --cf-warning: #a15c07;
+    --cf-success: #087443;
+    --cf-grid: rgba(23, 26, 28, 0.045);
+    --cf-code-bg: #efeee9;
+    color-scheme: light;
+}
+
+.dark {
+    --cf-bg: #0b0f14;
+    --cf-surface: #10161d;
+    --cf-surface-raised: #141b23;
+    --cf-line: #1f2833;
+    --cf-line-strong: #2c3845;
+    --cf-text: #e8edf2;
+    --cf-muted: #8b98a7;
+    --cf-faint: #5f6b79;
+    --cf-accent: #2dd4bf;
+    --cf-accent-strong: #5eead4;
+    --cf-accent-soft: rgba(45, 212, 191, 0.1);
+    --cf-danger: #fb7185;
+    --cf-warning: #fbbf24;
+    --cf-success: #34d399;
+    --cf-grid: rgba(232, 237, 242, 0.035);
+    --cf-code-bg: #0a0e13;
+    color-scheme: dark;
+}
+
+@layer base {
+    * {
+        border-color: var(--cf-line);
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+            linear-gradient(to right, var(--cf-grid) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--cf-grid) 1px, transparent 1px),
+            var(--cf-bg);
+        background-size: 56px 56px, 56px 56px, auto;
+        background-attachment: fixed;
+    }
+
+    ::selection {
+        background: var(--cf-accent);
+        color: #04130f;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--cf-accent);
+        outline-offset: 2px;
+    }
+
+    button,
+    a {
+        -webkit-tap-highlight-color: transparent;
+    }
+}
+
+@layer components {
+    .cf-card {
+        border: 1px solid var(--cf-line);
+        background: color-mix(in srgb, var(--cf-surface) 92%, transparent);
+        border-radius: 0.875rem;
+    }
+
+    .cf-label {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--cf-faint);
+    }
+
+    .cf-hairline {
+        border-top: 1px solid var(--cf-line);
+    }
+
+    .cf-table-row {
+        border-top: 1px solid var(--cf-line);
+        transition: background-color 120ms ease;
+    }
+
+    .cf-table-row:hover {
+        background: color-mix(in srgb, var(--cf-surface-raised) 70%, transparent);
+    }
+
+    .cf-input {
+        width: 100%;
+        border: 1px solid var(--cf-line-strong);
+        border-radius: 0.5rem;
+        background: var(--cf-bg);
+        padding: 0.625rem 0.75rem;
+        font-size: 0.875rem;
+        color: var(--cf-text);
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .cf-input::placeholder {
+        color: var(--cf-faint);
+    }
+
+    .cf-input:focus {
+        outline: none;
+        border-color: var(--cf-accent);
+        box-shadow: 0 0 0 3px var(--cf-accent-soft);
+    }
+
+    .cf-input[aria-invalid='true'] {
+        border-color: var(--cf-danger);
+    }
+
+    .cf-code {
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        background: var(--cf-code-bg);
+        border: 1px solid var(--cf-line);
+        border-radius: 0.5rem;
+    }
+
+    .cf-scanline {
+        background-image: repeating-linear-gradient(
+            to bottom,
+            transparent,
+            transparent 2px,
+            var(--cf-grid) 2px,
+            var(--cf-grid) 3px
+        );
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

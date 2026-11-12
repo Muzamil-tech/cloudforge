@@ -1,0 +1,33 @@
+[Unit]
+Description=CloudForge Agent
+Documentation=https://github.com/Muzamil-tech/cloudforge
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/cloudforge/agent.env
+
+[Service]
+Type=simple
+User=cloudforge-agent
+Group=cloudforge-agent
+EnvironmentFile=/etc/cloudforge/agent.env
+ExecStart=/usr/local/bin/cloudforge-agent run
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/cloudforge-agent -/run/docker.sock
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
