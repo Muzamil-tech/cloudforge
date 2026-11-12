@@ -140,6 +140,8 @@ go vet ./...
 ## Documentation
 
 - [Architecture](docs/architecture/overview.md)
+- [UI repository audit](docs/ui-ux/REPOSITORY_AUDIT.md)
+- [Design system](docs/ui-ux/DESIGN_SYSTEM.md)
 - [API reference](docs/api/README.md)
 - [Agent protocol](docs/agent/protocol.md)
 - [Agent installation](docs/agent/installation.md)

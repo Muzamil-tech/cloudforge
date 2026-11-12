@@ -8,6 +8,7 @@ use App\Domains\Operations\Models\AuditLog;
 use App\Domains\Organizations\Enums\MembershipStatus;
 use App\Domains\Organizations\Enums\OrganizationRole;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Resources\Models\Resource;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -100,6 +101,14 @@ class Organization extends Model
     public function servers(): HasMany
     {
         return $this->hasMany(Server::class);
+    }
+
+    /**
+     * @return HasMany<resource, $this>
+     */
+    public function resources(): HasMany
+    {
+        return $this->hasMany(Resource::class);
     }
 
     public function membershipFor(User $user): ?Membership

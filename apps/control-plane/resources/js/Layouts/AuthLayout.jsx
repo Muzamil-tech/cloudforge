@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BrandMark } from './AppLayout';
+import { BrandMark } from '../Components/BrandMark';
 import { FlashMessages } from '../Components/FlashMessages';
 
 const highlights = [

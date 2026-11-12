@@ -98,8 +98,8 @@ return new class extends Migration
         }
 
         if ($driver === 'mysql' || $driver === 'mariadb') {
-            DB::statement('alter table server_enrollments alter column expires_at drop default');
-            DB::statement('alter table server_enrollments alter column consumed_at drop default');
+            // DB::statement('alter table server_enrollments alter column expires_at drop default');
+            // DB::statement('alter table server_enrollments alter column consumed_at drop default');
 
             return;
         }

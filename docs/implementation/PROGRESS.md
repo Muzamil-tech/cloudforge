@@ -91,6 +91,9 @@ or token from the dashboard.
 | 25 | One-time database credentials | Encrypted resource password, one-time reveal, command-result redaction | `ResourceProvisioningTest` credential and agent-result tests | Tested locally. |
 | 26 | Resource lifecycle and recovery | Start, stop, delete, inspect, scheduled reconciliation | `ResourceProvisioningTest`; `ReconcileResources` | Tested locally. |
 | 27 | MySQL, application attachment and backups | Not implemented | None | **Not started.** |
+| 28 | Product UI shell and design foundation | Theme tokens, collapsible sidebar, breadcrumbs, account menu, shared cards/stats/credentials, responsive drawer | `DatabasesIndex`/dashboard feature tests; `npm run build` | Tested locally. No browser E2E or formal contrast audit. |
+| 29 | Organization-wide Databases workspace | Real resource index with search, filters, sorting and lifecycle actions | `ResourceProvisioningTest` | Tested locally. |
+| 30 | Projects listing and workspace | Real counts, search/sort, project header, Overview/Databases/Environments/Activity/Settings tabs | `ResourceProvisioningTest`; `npm run build` | Tested locally. No browser E2E. |
 
 ### Command evidence
 

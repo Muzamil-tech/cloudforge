@@ -14,15 +14,45 @@ use App\Domains\Resources\Actions\StartResource;
 use App\Domains\Resources\Actions\StopResource;
 use App\Domains\Resources\Enums\ResourceType;
 use App\Domains\Resources\Models\Resource;
+use App\Domains\Resources\Presenters\ResourcePresenter;
 use App\Http\Controllers\Controller;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ResourceController extends Controller
 {
+    public function index(
+        Request $request,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        $organization = $organizationContext->require($request);
+        $resources = $organization->resources()
+            ->with(['project', 'environment', 'server'])
+            ->latest()
+            ->get();
+
+        return Inertia::render('Databases/Index', [
+            'resources' => $resources
+                ->map(fn (Resource $resource): array => $resourcePresenter->toArray($resource, $request->user()))
+                ->values()
+                ->all(),
+            'resourceTypes' => collect(ResourceType::cases())
+                ->map(fn (ResourceType $type): array => [
+                    'value' => $type->value,
+                    'label' => $type->label(),
+                ])
+                ->all(),
+            'canProvision' => $organizationContext->role($request)?->canDeploy() ?? false,
+            'hasProjects' => $organization->projects()->exists(),
+        ]);
+    }
+
     public function store(
         Request $request,
         Project $project,

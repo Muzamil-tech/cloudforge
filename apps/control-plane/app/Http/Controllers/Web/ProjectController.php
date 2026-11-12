@@ -4,18 +4,22 @@ namespace App\Http\Controllers\Web;
 
 use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Operations\Enums\AuditAction;
+use App\Domains\Operations\Models\AuditLog;
 use App\Domains\Operations\Services\AuditLogger;
 use App\Domains\Projects\Actions\CreateProject;
 use App\Domains\Projects\Enums\EnvironmentType;
 use App\Domains\Projects\Models\Environment;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Resources\Enums\ResourceStatus;
 use App\Domains\Resources\Enums\ResourceType;
 use App\Domains\Resources\Models\Resource;
+use App\Domains\Resources\Presenters\ResourcePresenter;
 use App\Http\Controllers\Controller;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -29,11 +33,19 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Index', [
             'projects' => $organization->projects()
-                ->with('environments')
+                ->with(['environments', 'resources'])
                 ->latest()
                 ->get()
                 ->map(fn (Project $project): array => $this->projectPayload($project))
                 ->all(),
+            'summary' => [
+                'projects' => $organization->projects()->count(),
+                'databases' => $organization->resources()->count(),
+                'environments' => $organization->projects()->withCount('environments')->get()->sum('environments_count'),
+                'active_databases' => $organization->resources()
+                    ->where('status', ResourceStatus::Active)
+                    ->count(),
+            ],
             'canCreate' => Gate::allows('create', [Project::class, $organization]),
             'canManage' => $organizationContext->role($request)?->canDeploy() ?? false,
         ]);
@@ -58,12 +70,62 @@ class ProjectController extends Controller
             ->with('success', "{$project->name} was created with a production environment.");
     }
 
-    public function show(Request $request, Project $project, OrganizationContext $organizationContext): Response
-    {
+    public function show(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        return $this->workspace($request, $project, $organizationContext, $resourcePresenter, 'overview');
+    }
+
+    public function databases(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        return $this->workspace($request, $project, $organizationContext, $resourcePresenter, 'databases');
+    }
+
+    public function environmentsTab(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        return $this->workspace($request, $project, $organizationContext, $resourcePresenter, 'environments');
+    }
+
+    public function activity(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        return $this->workspace($request, $project, $organizationContext, $resourcePresenter, 'activity');
+    }
+
+    public function settings(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+    ): Response {
+        return $this->workspace($request, $project, $organizationContext, $resourcePresenter, 'settings');
+    }
+
+    private function workspace(
+        Request $request,
+        Project $project,
+        OrganizationContext $organizationContext,
+        ResourcePresenter $resourcePresenter,
+        string $tab,
+    ): Response {
         $organization = $organizationContext->require($request);
         Gate::authorize('view', $project);
 
-        $project->load(['environments', 'resources.environment', 'resources.server']);
+        $project->load(['environments', 'resources.project', 'resources.environment', 'resources.server']);
 
         $servers = $organization->servers()
             ->whereIn('status', [ServerStatus::Active, ServerStatus::Ready])
@@ -78,10 +140,35 @@ class ProjectController extends Controller
             ])
             ->all();
 
+        $resources = $project->resources;
+        $activity = $this->projectActivity($project, $tab === 'activity' ? 100 : 8);
+
+        $attention = $resources
+            ->where('status', ResourceStatus::Failed)
+            ->map(fn (Resource $resource): array => [
+                'id' => $resource->id,
+                'tone' => 'danger',
+                'title' => "{$resource->name} failed",
+                'description' => $resource->last_error ?: 'The managed resource needs attention.',
+                'href' => route('projects.databases', $project),
+            ])
+            ->values()
+            ->all();
+
+        $stats = [
+            'databases' => $resources->count(),
+            'active_databases' => $resources->where('status', ResourceStatus::Active)->count(),
+            'failed_databases' => $resources->where('status', ResourceStatus::Failed)->count(),
+            'environments' => $project->environments->count(),
+            'servers' => $resources->pluck('server_id')->unique()->count(),
+            'attention' => count($attention),
+        ];
+
         return Inertia::render('Projects/Show', [
+            'tab' => $tab,
             'project' => $this->projectPayload($project),
-            'resources' => $project->resources
-                ->map(fn (Resource $resource): array => $this->resourcePayload($resource))
+            'resources' => $resources
+                ->map(fn (Resource $resource): array => $resourcePresenter->toArray($resource, $request->user()))
                 ->values()
                 ->all(),
             'servers' => $servers,
@@ -99,10 +186,47 @@ class ProjectController extends Controller
                     'label' => $type->label(),
                 ])
                 ->all(),
+            'activity' => $activity,
+            'stats' => $stats,
+            'attention' => $attention,
             'canManage' => Gate::allows('update', $project),
             'canDelete' => Gate::allows('delete', $project),
             'canCreateResource' => Gate::allows('create', [Resource::class, $project]),
         ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function projectActivity(Project $project, int $limit): array
+    {
+        $resourceIds = $project->resources->pluck('id');
+
+        return AuditLog::query()
+            ->where('organization_id', $project->organization_id)
+            ->where(function ($query) use ($project, $resourceIds): void {
+                $query->where('resource_id', $project->id);
+
+                if ($resourceIds->isNotEmpty()) {
+                    $query->orWhereIn('resource_id', $resourceIds);
+                }
+            })
+            ->with('actor')
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get()
+            ->map(fn (AuditLog $log): array => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'action_label' => Str::headline(str_replace(['.', '_'], ' ', $log->action)),
+                'actor' => $log->actor?->name ?? 'System',
+                'resource_type' => $log->resource_type,
+                'resource_id' => $log->resource_id,
+                'metadata' => $log->metadata,
+                'created_at' => $log->created_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
     }
 
     public function update(
@@ -226,45 +350,6 @@ class ProjectController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function resourcePayload(Resource $resource): array
-    {
-        return [
-            'id' => $resource->id,
-            'name' => $resource->name,
-            'type' => $resource->type->value,
-            'type_label' => $resource->type->label(),
-            'image' => $resource->image,
-            'status' => $resource->status->value,
-            'status_label' => $resource->status->label(),
-            'status_tone' => $resource->status->tone(),
-            'environment' => [
-                'id' => $resource->environment->id,
-                'name' => $resource->environment->name,
-                'type' => $resource->environment->type->value,
-                'type_label' => $resource->environment->type->label(),
-            ],
-            'server' => [
-                'id' => $resource->server->id,
-                'name' => $resource->server->name,
-            ],
-            'host' => $resource->host,
-            'port' => $resource->port,
-            'database_name' => $resource->database_name,
-            'username' => $resource->username,
-            'credentials_revealed' => $resource->isRevealed(),
-            'can_reveal' => $resource->canRevealCredentials() && Gate::allows('reveal', $resource),
-            'can_start' => $resource->status->canStart() && Gate::allows('start', $resource),
-            'can_stop' => $resource->status->canStop() && Gate::allows('stop', $resource),
-            'can_delete' => $resource->status->canDelete() && Gate::allows('delete', $resource),
-            'can_refresh' => ! $resource->status->isTransitional() && Gate::allows('refresh', $resource),
-            'last_error' => $resource->last_error,
-            'created_at' => $resource->created_at?->toIso8601String(),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
     private function projectPayload(Project $project): array
     {
         return [
@@ -273,6 +358,11 @@ class ProjectController extends Controller
             'slug' => $project->slug,
             'description' => $project->description,
             'created_at' => $project->created_at?->toIso8601String(),
+            'resource_count' => $project->resources->count(),
+            'active_resource_count' => $project->resources->where('status', ResourceStatus::Active)->count(),
+            'failed_resource_count' => $project->resources->where('status', ResourceStatus::Failed)->count(),
+            'environment_count' => $project->environments->count(),
+            'server_count' => $project->resources->pluck('server_id')->unique()->count(),
             'environments' => $project->environments
                 ->map(fn (Environment $environment): array => [
                     'id' => $environment->id,
@@ -281,6 +371,11 @@ class ProjectController extends Controller
                     'type' => $environment->type->value,
                     'type_label' => $environment->type->label(),
                     'created_at' => $environment->created_at?->toIso8601String(),
+                    'resource_count' => $project->resources->where('environment_id', $environment->id)->count(),
+                    'active_resource_count' => $project->resources
+                        ->where('environment_id', $environment->id)
+                        ->where('status', ResourceStatus::Active)
+                        ->count(),
                 ])
                 ->values()
                 ->all(),

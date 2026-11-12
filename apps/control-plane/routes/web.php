@@ -42,7 +42,13 @@ Route::middleware('auth')->group(function (): void {
         Route::post('servers/{server}/commands', [ServerController::class, 'issueCommand'])->name('servers.commands.store');
         Route::post('servers/{server}/commands/{command}/cancel', [ServerController::class, 'cancelCommand'])->name('servers.commands.cancel');
 
+        Route::get('databases', [ResourceController::class, 'index'])->name('databases.index');
+
         Route::resource('projects', ProjectController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::get('projects/{project}/databases', [ProjectController::class, 'databases'])->name('projects.databases');
+        Route::get('projects/{project}/environments', [ProjectController::class, 'environmentsTab'])->name('projects.environments');
+        Route::get('projects/{project}/activity', [ProjectController::class, 'activity'])->name('projects.activity');
+        Route::get('projects/{project}/settings', [ProjectController::class, 'settings'])->name('projects.settings');
         Route::post('projects/{project}/environments', [ProjectController::class, 'storeEnvironment'])->name('projects.environments.store');
         Route::delete('projects/{project}/environments/{environment}', [ProjectController::class, 'destroyEnvironment'])->name('projects.environments.destroy');
 

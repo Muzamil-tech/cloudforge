@@ -335,6 +335,22 @@ infrastructure; no known critical security finding remains.
 
 ---
 
+## Product UI/UX implementation
+
+**Scope:** the approved CloudForge UI direction in `docs/ui-ux/`.
+**Implemented:** semantic tokens, light/dark theme switch, grouped collapsible
+sidebar, breadcrumbs, account menu, responsive mobile drawer, shared page/stat/
+credential components, real-data dashboard with attention queue and managed
+databases, and an organization-wide Databases workspace with search, filters,
+sorting and lifecycle actions.
+**Blocked:** application and deployment screens (no backend models, routes or
+state), domains, backups, networking and MySQL. These are documented as missing
+rather than represented by static UI.
+**Status:** Design foundation, shell, dashboard and database workspace tested
+locally. No browser end-to-end or formal contrast audit has been run.
+
+---
+
 ## Cross-cutting rules
 
 1. **No fake status.** Every operation returns a real result or an explicit

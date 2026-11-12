@@ -28,28 +28,34 @@
     --color-accent: var(--cf-accent);
     --color-accent-strong: var(--cf-accent-strong);
     --color-accent-soft: var(--cf-accent-soft);
+    --color-accent-foreground: var(--cf-accent-foreground);
     --color-danger: var(--cf-danger);
     --color-warning: var(--cf-warning);
     --color-success: var(--cf-success);
+    --color-info: var(--cf-info);
 }
 
 :root {
-    --cf-bg: #f5f4f0;
-    --cf-surface: #fbfaf7;
-    --cf-surface-raised: #ffffff;
-    --cf-line: #e2e0d9;
-    --cf-line-strong: #cbc8be;
-    --cf-text: #171a1c;
-    --cf-muted: #5d656c;
-    --cf-faint: #8b9298;
-    --cf-accent: #0f766e;
-    --cf-accent-strong: #0b5f59;
-    --cf-accent-soft: rgba(15, 118, 110, 0.1);
-    --cf-danger: #b42318;
-    --cf-warning: #a15c07;
-    --cf-success: #087443;
-    --cf-grid: rgba(23, 26, 28, 0.045);
-    --cf-code-bg: #efeee9;
+    --cf-bg: #f8fafc;
+    --cf-surface: #ffffff;
+    --cf-surface-raised: #f1f5f9;
+    --cf-line: #e2e8f0;
+    --cf-line-strong: #cbd5e1;
+    --cf-text: #101828;
+    --cf-muted: #64748b;
+    --cf-faint: #94a3b8;
+    --cf-accent: #2563eb;
+    --cf-accent-strong: #1d4ed8;
+    --cf-accent-soft: rgba(37, 99, 235, 0.1);
+    --cf-accent-foreground: #ffffff;
+    --cf-danger: #dc2626;
+    --cf-warning: #d97706;
+    --cf-success: #0d9488;
+    --cf-info: #2563eb;
+    --cf-selection-text: #ffffff;
+    --cf-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+    --cf-grid: rgba(16, 24, 40, 0.035);
+    --cf-code-bg: #f1f5f9;
     color-scheme: light;
 }
 
@@ -62,12 +68,16 @@
     --cf-text: #e8edf2;
     --cf-muted: #8b98a7;
     --cf-faint: #5f6b79;
-    --cf-accent: #2dd4bf;
-    --cf-accent-strong: #5eead4;
-    --cf-accent-soft: rgba(45, 212, 191, 0.1);
+    --cf-accent: #60a5fa;
+    --cf-accent-strong: #93c5fd;
+    --cf-accent-soft: rgba(96, 165, 250, 0.12);
+    --cf-accent-foreground: #06101f;
     --cf-danger: #fb7185;
     --cf-warning: #fbbf24;
     --cf-success: #34d399;
+    --cf-info: #60a5fa;
+    --cf-selection-text: #06101f;
+    --cf-card-shadow: 0 1px 0 rgba(255, 255, 255, 0.025);
     --cf-grid: rgba(232, 237, 242, 0.035);
     --cf-code-bg: #0a0e13;
     color-scheme: dark;
@@ -95,7 +105,7 @@
 
     ::selection {
         background: var(--cf-accent);
-        color: #04130f;
+        color: var(--cf-selection-text);
     }
 
     :focus-visible {
@@ -114,6 +124,33 @@
         border: 1px solid var(--cf-line);
         background: color-mix(in srgb, var(--cf-surface) 92%, transparent);
         border-radius: 0.875rem;
+        box-shadow: var(--cf-card-shadow);
+    }
+
+    .cf-skeleton {
+        background: linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--cf-line) 70%, transparent) 25%,
+            color-mix(in srgb, var(--cf-line-strong) 50%, transparent) 37%,
+            color-mix(in srgb, var(--cf-line) 70%, transparent) 63%
+        );
+        background-size: 400% 100%;
+        animation: cf-shimmer 1.4s ease infinite;
+        border-radius: 0.5rem;
+    }
+
+    @keyframes cf-shimmer {
+        0% {
+            background-position: 100% 0;
+        }
+        100% {
+            background-position: -100% 0;
+        }
+    }
+
+    .cf-divider {
+        height: 1px;
+        background: var(--cf-line);
     }
 
     .cf-label {

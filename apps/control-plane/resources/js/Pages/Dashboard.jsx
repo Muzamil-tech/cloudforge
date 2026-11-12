@@ -1,51 +1,59 @@
 import { Head, Link } from '@inertiajs/react';
 import { AppLayout } from '../Layouts/AppLayout';
-import { StatusBadge } from '../Components/StatusBadge';
 import { EmptyState } from '../Components/EmptyState';
 import { Icon } from '../Components/Icons';
+import { PageSection } from '../Components/PageSection';
+import { StatCard } from '../Components/StatCard';
+import { StatusBadge } from '../Components/StatusBadge';
 import { buttonClass } from '../Components/Button';
-import { formatRelative, initials, formatDate } from '../lib/format';
+import { formatRelative, initials } from '../lib/format';
 import { serverStatusMeta } from '../lib/status';
 
-const statCards = [
-    { key: 'servers', label: 'Servers', icon: 'server', caption: 'registered nodes' },
-    { key: 'healthy', label: 'Reachable', icon: 'activity', caption: 'healthy now' },
-    { key: 'projects', label: 'Projects', icon: 'boxes', caption: 'delivery units' },
-    { key: 'members', label: 'Members', icon: 'users', caption: 'active people' },
-];
-
-function StatCard({ item, value }) {
+function AttentionItem({ item }) {
     return (
-        <div className="cf-card p-4">
-            <div className="flex items-start justify-between gap-2">
-                <div>
-                    <p className="cf-label">{item.label}</p>
-                    <p className="mt-2 text-3xl font-semibold tracking-tight text-ink tabular-nums">{value}</p>
-                </div>
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-raised text-faint">
-                    <Icon name={item.icon} size={16} />
-                </span>
+        <li className="flex gap-3 px-4 py-3">
+            <span
+                className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
+                    item.tone === 'danger'
+                        ? 'border-danger/25 bg-danger/10 text-danger'
+                        : 'border-warning/25 bg-warning/10 text-warning'
+                }`}
+            >
+                <Icon name={item.tone === 'danger' ? 'alert' : 'clock'} size={14} />
+            </span>
+            <div className="min-w-0 flex-1">
+                <Link href={item.href} className="block truncate text-xs font-medium text-ink hover:text-accent">
+                    {item.title}
+                </Link>
+                <p className="mt-0.5 line-clamp-2 text-[11px] leading-5 text-faint">{item.description}</p>
             </div>
-            <p className="mt-2 text-[11px] text-faint">{item.caption}</p>
-        </div>
+        </li>
     );
 }
 
-export default function Dashboard({ stats, statusCounts, servers, recentAudit }) {
+export default function Dashboard({
+    stats,
+    resourceStats = { active: 0, failed: 0, provisioning: 0 },
+    attention = [],
+    statusCounts,
+    servers,
+    resources = [],
+    recentAudit,
+}) {
     const statusRows = Object.entries(serverStatusMeta).filter(([key]) => (statusCounts[key] ?? 0) > 0);
 
     return (
         <AppLayout
             title="Overview"
-            description="A live view of the fleet, delivery units and recent privileged activity."
+            description="Live infrastructure, managed databases and privileged activity for this organization."
             eyebrow="Control plane"
             actions={
                 <>
-                    <Link href="/projects" className={buttonClass({ variant: 'secondary', size: 'md' })}>
+                    <Link href="/projects" className={buttonClass({ variant: 'secondary' })}>
                         <Icon name="boxes" size={15} />
                         Projects
                     </Link>
-                    <Link href="/servers/create" className={buttonClass({ variant: 'primary', size: 'md' })}>
+                    <Link href="/servers/create" className={buttonClass({ variant: 'primary' })}>
                         <Icon name="plus" size={15} />
                         Add server
                     </Link>
@@ -55,88 +63,128 @@ export default function Dashboard({ stats, statusCounts, servers, recentAudit })
             <Head title="Overview" />
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {statCards.map((item) => (
-                    <StatCard key={item.key} item={item} value={stats[item.key] ?? 0} />
-                ))}
+                <StatCard
+                    label="Servers"
+                    value={stats.servers ?? 0}
+                    caption={`${stats.healthy ?? 0} reachable`}
+                    icon="server"
+                    tone="accent"
+                />
+                <StatCard
+                    label="Projects"
+                    value={stats.projects ?? 0}
+                    caption="delivery units"
+                    icon="boxes"
+                    tone="neutral"
+                />
+                <StatCard
+                    label="Databases"
+                    value={stats.databases ?? 0}
+                    caption={`${resourceStats.active} active`}
+                    icon="database"
+                    tone={resourceStats.failed > 0 ? 'danger' : 'success'}
+                />
+                <StatCard
+                    label="Attention"
+                    value={attention.length}
+                    caption={attention.length === 0 ? 'all clear' : 'items need review'}
+                    icon="alert"
+                    tone={attention.length === 0 ? 'success' : 'warning'}
+                />
             </div>
 
-            <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-                <section className="cf-card overflow-hidden">
-                    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-                        <div>
-                            <h2 className="text-sm font-semibold text-ink">Fleet</h2>
-                            <p className="mt-0.5 text-xs text-faint">Most recently seen servers first</p>
-                        </div>
-                        <Link href="/servers" className="text-xs font-medium text-accent hover:text-accent-strong">
-                            View all
-                        </Link>
-                    </div>
+            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+                <div className="space-y-5">
+                    <PageSection
+                        title="Attention required"
+                        description="Real conditions reported by the agent or resource layer."
+                    >
+                        {attention.length === 0 ? (
+                            <div className="flex items-center gap-3 px-4 py-5">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-success/25 bg-success/10 text-success">
+                                    <Icon name="check" size={17} />
+                                </span>
+                                <div>
+                                    <p className="text-sm font-medium text-ink">No operational issues</p>
+                                    <p className="mt-0.5 text-xs text-faint">Every reachable server and managed database is healthy.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <ul className="divide-y divide-line">
+                                {attention.map((item) => (
+                                    <AttentionItem key={item.id} item={item} />
+                                ))}
+                            </ul>
+                        )}
+                    </PageSection>
 
-                    {servers.length === 0 ? (
-                        <EmptyState
-                            icon="server"
-                            title="No servers yet"
-                            description="Register a VPS, issue a single-use enrollment token, then install the agent."
-                            action={
-                                <Link href="/servers/create" className={buttonClass({ variant: 'primary', size: 'sm' })}>
-                                    <Icon name="plus" size={14} />
-                                    Register a server
-                                </Link>
-                            }
-                        />
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[560px] text-left">
-                                <thead>
-                                    <tr className="bg-surface-raised/50">
-                                        <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Server</th>
-                                        <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Status</th>
-                                        <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Heartbeat</th>
-                                        <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Roles</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {servers.map((server) => (
-                                        <tr key={server.id} className="cf-table-row">
-                                            <td className="px-4 py-3">
-                                                <Link href={`/servers/${server.id}`} className="group flex items-center gap-2.5">
-                                                    <span className="flex h-7 w-7 items-center justify-center rounded-md border border-line bg-surface-raised font-mono text-[10px] text-faint">
-                                                        {initials(server.name)}
-                                                    </span>
-                                                    <span className="min-w-0">
-                                                        <span className="block truncate text-[13px] font-medium text-ink group-hover:text-accent">
-                                                            {server.name}
-                                                        </span>
-                                                        <span className="block truncate font-mono text-[10px] text-faint">{server.hostname}</span>
-                                                    </span>
-                                                </Link>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <StatusBadge tone={server.tone}>{server.status_label}</StatusBadge>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-muted">{formatRelative(server.last_heartbeat_at)}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {server.roles.map((role) => (
-                                                        <span key={role} className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-muted">
-                                                            {role}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
+                    <PageSection
+                        title="Fleet"
+                        description="Most recently seen servers first."
+                        actions={
+                            <Link href="/servers" className="text-xs font-medium text-accent hover:text-accent-strong">
+                                View all
+                            </Link>
+                        }
+                    >
+                        {servers.length === 0 ? (
+                            <EmptyState
+                                icon="server"
+                                title="No servers yet"
+                                description="Register a VPS and install the agent to start deploying workloads."
+                                action={
+                                    <Link href="/servers/create" className={buttonClass({ variant: 'primary', size: 'sm' })}>
+                                        <Icon name="plus" size={14} />
+                                        Register a server
+                                    </Link>
+                                }
+                            />
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[620px] text-left">
+                                    <thead>
+                                        <tr className="bg-surface-raised/50">
+                                            <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Server</th>
+                                            <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Status</th>
+                                            <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Heartbeat</th>
+                                            <th className="px-4 py-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">Docker</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </section>
+                                    </thead>
+                                    <tbody>
+                                        {servers.map((server) => (
+                                            <tr key={server.id} className="cf-table-row">
+                                                <td className="px-4 py-3">
+                                                    <Link href={`/servers/${server.id}`} className="group flex items-center gap-2.5">
+                                                        <span className="flex h-7 w-7 items-center justify-center rounded-md border border-line bg-surface-raised font-mono text-[10px] text-faint">
+                                                            {initials(server.name)}
+                                                        </span>
+                                                        <span className="min-w-0">
+                                                            <span className="block truncate text-[13px] font-medium text-ink group-hover:text-accent">
+                                                                {server.name}
+                                                            </span>
+                                                            <span className="block truncate font-mono text-[10px] text-faint">{server.hostname}</span>
+                                                        </span>
+                                                    </Link>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <StatusBadge tone={server.tone}>{server.status_label}</StatusBadge>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-muted">{formatRelative(server.last_heartbeat_at)}</td>
+                                                <td className="px-4 py-3 font-mono text-[11px] text-muted">
+                                                    {server.docker_version || '—'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </PageSection>
+                </div>
 
                 <div className="space-y-5">
-                    <section className="cf-card p-4">
-                        <h2 className="text-sm font-semibold text-ink">Node states</h2>
-                        <p className="mt-0.5 text-xs text-faint">Lifecycle distribution across the organization</p>
-                        <div className="mt-3 space-y-2.5">
+                    <PageSection title="Node states" description="Lifecycle distribution across the fleet.">
+                        <div className="space-y-2.5 p-4">
                             {statusRows.length === 0 ? (
                                 <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-faint">
                                     No node states recorded yet.
@@ -185,15 +233,16 @@ export default function Dashboard({ stats, statusCounts, servers, recentAudit })
                                 })
                             )}
                         </div>
-                    </section>
+                    </PageSection>
 
-                    <section className="cf-card overflow-hidden">
-                        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-                            <h2 className="text-sm font-semibold text-ink">Recent activity</h2>
+                    <PageSection
+                        title="Recent activity"
+                        actions={
                             <Link href="/audit-log" className="text-xs font-medium text-accent hover:text-accent-strong">
                                 Audit log
                             </Link>
-                        </div>
+                        }
+                    >
                         {recentAudit.length === 0 ? (
                             <p className="px-4 py-8 text-center text-xs text-faint">No audit events yet.</p>
                         ) : (
@@ -211,14 +260,59 @@ export default function Dashboard({ stats, statusCounts, servers, recentAudit })
                                 ))}
                             </ul>
                         )}
-                    </section>
+                    </PageSection>
                 </div>
             </div>
 
-            <p className="mt-6 flex items-center gap-1.5 font-mono text-[10px] tracking-wide text-faint uppercase">
-                <Icon name="shield" size={12} />
-                Phase 1 control plane · updated {formatDate(new Date().toISOString())}
-            </p>
+            <PageSection
+                title="Managed databases"
+                description="PostgreSQL and Redis resources provisioned through the agent."
+                className="mt-5"
+                actions={
+                    <Link href="/databases" className="text-xs font-medium text-accent hover:text-accent-strong">
+                        View all
+                    </Link>
+                }
+            >
+                {resources.length === 0 ? (
+                    <EmptyState
+                        icon="database"
+                        title="No managed databases"
+                        description="Open a project to provision a PostgreSQL or Redis resource for an environment."
+                        action={
+                            <Link href="/projects" className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                                <Icon name="boxes" size={14} />
+                                Open projects
+                            </Link>
+                        }
+                    />
+                ) : (
+                    <ul className="divide-y divide-line">
+                        {resources.map((resource) => (
+                            <li key={resource.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-line bg-surface-raised text-faint">
+                                    <Icon name="database" size={15} />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <p className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-ink">
+                                        {resource.name}
+                                        <StatusBadge tone={resource.status_tone}>{resource.status_label}</StatusBadge>
+                                    </p>
+                                    <p className="mt-0.5 font-mono text-[10px] text-faint">
+                                        {resource.type_label} · {resource.project.name} · {resource.environment} · {resource.server}
+                                    </p>
+                                </div>
+                                {resource.port ? (
+                                    <code className="font-mono text-[11px] text-muted">127.0.0.1:{resource.port}</code>
+                                ) : null}
+                                <Link href={`/projects/${resource.project.id}`} className="text-xs font-medium text-accent hover:text-accent-strong">
+                                    Open project
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </PageSection>
         </AppLayout>
     );
 }

@@ -242,6 +242,147 @@ class ResourceProvisioningTest extends TestCase
         ]);
     }
 
+    public function test_databases_page_lists_real_resources_without_credentials(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'main-db', 'password' => 'hidden-secret']);
+
+        $this->actingIn($organization, $owner)
+            ->get(route('databases.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Databases/Index')
+                ->has('resources', 1)
+                ->where('resources.0.id', $resource->id)
+                ->where('resources.0.project.name', $project->name)
+                ->where('resources.0.status', 'active')
+                ->where('canProvision', true)
+                ->missing('resources.0.password'));
+    }
+
+    public function test_databases_page_is_scoped_to_the_current_organization(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+        [$otherOwner, $otherOrganization, $otherProject, $otherServer] = $this->context();
+
+        Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'visible-db']);
+
+        Resource::factory()
+            ->forProject($otherProject, $otherProject->environments()->firstOrFail(), $otherServer)
+            ->active()
+            ->create(['name' => 'hidden-db']);
+
+        $this->actingIn($organization, $owner)
+            ->get(route('databases.index'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('resources', 1)
+                ->where('resources.0.name', 'visible-db'));
+    }
+
+    public function test_dashboard_reports_real_database_counts_and_attention(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'healthy-db']);
+
+        Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->create(['name' => 'failed-db', 'status' => ResourceStatus::Failed, 'last_error' => 'pull failed']);
+
+        $this->actingIn($organization, $owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Dashboard')
+                ->where('stats.databases', 2)
+                ->where('resourceStats.active', 1)
+                ->where('resourceStats.failed', 1)
+                ->has('resources', 2)
+                ->has('attention', 1)
+                ->where('attention.0.title', 'failed-db failed'));
+    }
+
+    public function test_project_tabs_expose_real_resources_activity_and_settings(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $environment = $project->environments()->firstOrFail();
+        $resource = app(CreateResource::class)->execute(
+            $project,
+            $environment,
+            $server,
+            'main-db',
+            ResourceType::Postgresql,
+            $owner,
+        );
+
+        $this->actingIn($organization, $owner)
+            ->get(route('projects.databases', $project))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Projects/Show')
+                ->where('tab', 'databases')
+                ->has('resources', 1)
+                ->where('resources.0.id', $resource->id)
+                ->where('project.environment_count', 1)
+                ->where('stats.databases', 1));
+
+        $this->actingIn($organization, $owner)
+            ->get(route('projects.environments', $project))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Projects/Show')
+                ->where('tab', 'environments')
+                ->where('project.environments.0.resource_count', 1));
+
+        $this->actingIn($organization, $owner)
+            ->get(route('projects.activity', $project))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Projects/Show')
+                ->where('tab', 'activity')
+                ->has('activity'));
+
+        $this->actingIn($organization, $owner)
+            ->get(route('projects.settings', $project))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Projects/Show')
+                ->where('tab', 'settings')
+                ->where('canManage', true));
+    }
+
+    public function test_projects_page_reports_real_summary_counts(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'main-db']);
+
+        $this->actingIn($organization, $owner)
+            ->get(route('projects.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Projects/Index')
+                ->where('summary.projects', 1)
+                ->where('summary.databases', 1)
+                ->where('summary.environments', 1)
+                ->where('projects.0.resource_count', 1)
+                ->where('projects.0.environment_count', 1));
+    }
+
     public function test_viewers_cannot_provision_resources(): void
     {
         [$owner, $organization, $project, $server] = $this->context();

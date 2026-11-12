@@ -2,7 +2,7 @@ export const buttonBase =
     'inline-flex items-center justify-center gap-2 rounded-lg border text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
 
 export const buttonVariants = {
-    primary: 'border-accent/60 bg-accent text-[#04130f] hover:bg-accent-strong border-transparent',
+    primary: 'border-accent/60 bg-accent text-accent-foreground hover:bg-accent-strong border-transparent',
     secondary: 'border-line-strong bg-surface-raised text-ink hover:border-accent/40 hover:text-accent',
     ghost: 'border-transparent bg-transparent text-muted hover:bg-surface-raised hover:text-ink',
     danger: 'border-danger/40 bg-danger/10 text-danger hover:bg-danger/20',

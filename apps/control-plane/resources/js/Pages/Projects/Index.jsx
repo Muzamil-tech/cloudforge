@@ -1,51 +1,108 @@
+import { useMemo, useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { AppLayout } from '../../Layouts/AppLayout';
-import { StatusBadge } from '../../Components/StatusBadge';
-import { Field, Input, Textarea } from '../../Components/Field';
 import { EmptyState } from '../../Components/EmptyState';
+import { Field, Input, Textarea } from '../../Components/Field';
 import { Icon } from '../../Components/Icons';
+import { StatCard } from '../../Components/StatCard';
+import { StatusBadge } from '../../Components/StatusBadge';
 import { buttonClass } from '../../Components/Button';
-import { formatDate } from '../../lib/format';
-import { environmentTone, environmentTypeLabel } from '../../lib/status';
+import { formatDate, initials } from '../../lib/format';
+import { environmentTone } from '../../lib/status';
 
 function ProjectCard({ project }) {
+    const attention = (project.failed_resource_count ?? 0) > 0;
+
     return (
-        <Link
-            href={`/projects/${project.id}`}
-            className="cf-card group flex flex-col p-4 transition-colors hover:border-accent/30"
-        >
-            <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-ink group-hover:text-accent">{project.name}</h3>
-                    <p className="mt-0.5 font-mono text-[10px] text-faint">{project.slug}</p>
-                </div>
-                <Icon name="chevronRight" size={16} className="mt-0.5 shrink-0 text-faint group-hover:text-accent" />
+        <div className="cf-card group flex flex-col p-4 transition-colors hover:border-accent/30">
+            <div className="flex items-start justify-between gap-3">
+                <Link href={`/projects/${project.id}`} className="flex min-w-0 items-start gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-raised font-mono text-[11px] text-muted">
+                        {initials(project.name)}
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-ink group-hover:text-accent">{project.name}</span>
+                        <span className="mt-0.5 block font-mono text-[10px] text-faint">{project.slug}</span>
+                    </span>
+                </Link>
+                <StatusBadge tone={attention ? 'danger' : project.resource_count > 0 ? 'success' : 'info'} dot={false}>
+                    {attention ? 'Attention' : project.resource_count > 0 ? 'Healthy' : 'New'}
+                </StatusBadge>
             </div>
 
             <p className="mt-2 line-clamp-2 min-h-8 text-xs leading-5 text-muted">
                 {project.description || 'No description yet.'}
             </p>
 
+            <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-line bg-surface-raised/50 px-2.5 py-2">
+                    <p className="font-mono text-[9px] tracking-wide text-faint uppercase">Databases</p>
+                    <p className="mt-0.5 text-base font-semibold text-ink tabular-nums">{project.resource_count}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-surface-raised/50 px-2.5 py-2">
+                    <p className="font-mono text-[9px] tracking-wide text-faint uppercase">Envs</p>
+                    <p className="mt-0.5 text-base font-semibold text-ink tabular-nums">{project.environment_count}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-surface-raised/50 px-2.5 py-2">
+                    <p className="font-mono text-[9px] tracking-wide text-faint uppercase">Servers</p>
+                    <p className="mt-0.5 text-base font-semibold text-ink tabular-nums">{project.server_count}</p>
+                </div>
+            </div>
+
             <div className="mt-3 flex flex-wrap gap-1.5">
-                {project.environments.map((environment) => (
+                {project.environments.slice(0, 3).map((environment) => (
                     <StatusBadge key={environment.id} tone={environmentTone[environment.type] ?? 'neutral'} dot={false}>
                         {environment.name}
                     </StatusBadge>
                 ))}
-                {project.environments.length === 0 ? (
-                    <span className="text-[11px] text-faint">No environments</span>
+                {project.environments.length > 3 ? (
+                    <span className="text-[10px] text-faint">+{project.environments.length - 3} more</span>
                 ) : null}
+                {project.environments.length === 0 ? <span className="text-[10px] text-faint">No environments</span> : null}
             </div>
 
-            <p className="mt-auto border-t border-line pt-3 font-mono text-[10px] text-faint">
-                created {formatDate(project.created_at)}
-            </p>
-        </Link>
+            <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3">
+                <span className="font-mono text-[10px] text-faint">created {formatDate(project.created_at)}</span>
+                <div className="flex items-center gap-2">
+                    <Link href={`/projects/${project.id}/settings`} className="text-[11px] font-medium text-faint hover:text-accent">
+                        Settings
+                    </Link>
+                    <Link href={`/projects/${project.id}`} className="text-[11px] font-medium text-accent hover:text-accent-strong">
+                        Open
+                    </Link>
+                </div>
+            </div>
+        </div>
     );
 }
 
-export default function ProjectsIndex({ projects, canCreate }) {
+export default function ProjectsIndex({ projects, summary = {}, canCreate }) {
+    const [search, setSearch] = useState('');
+    const [sort, setSort] = useState('recent');
     const form = useForm({ name: '', description: '' });
+
+    const visible = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        const filtered = projects.filter((project) => {
+            if (!term) {
+                return true;
+            }
+
+            return [project.name, project.description ?? '', project.slug].join(' ').toLowerCase().includes(term);
+        });
+
+        return [...filtered].sort((a, b) => {
+            if (sort === 'name') {
+                return a.name.localeCompare(b.name);
+            }
+
+            if (sort === 'oldest') {
+                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            }
+
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+    }, [projects, search, sort]);
 
     function submit(event) {
         event.preventDefault();
@@ -57,24 +114,69 @@ export default function ProjectsIndex({ projects, canCreate }) {
     return (
         <AppLayout
             title="Projects"
-            description="Group related environments and services into delivery units."
-            eyebrow="Delivery"
+            description="Organize your applications, databases and environments in one workspace."
+            eyebrow="Workspace"
+            actions={
+                canCreate ? (
+                    <a href="#new-project" className={buttonClass({ variant: 'primary' })}>
+                        <Icon name="plus" size={15} />
+                        Create project
+                    </a>
+                ) : null
+            }
         >
             <Head title="Projects" />
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatCard label="Projects" value={summary.projects ?? projects.length} caption="workspaces" icon="boxes" tone="accent" />
+                <StatCard label="Databases" value={summary.databases ?? 0} caption={`${summary.active_databases ?? 0} active`} icon="database" tone="success" />
+                <StatCard label="Environments" value={summary.environments ?? 0} caption="deployment targets" icon="grid" tone="neutral" />
+                <StatCard label="Healthy" value={projects.filter((project) => (project.failed_resource_count ?? 0) === 0).length} caption="projects clear" icon="check" tone="info" />
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
                 <div>
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <label className="relative min-w-0 flex-1">
+                            <span className="sr-only">Search projects</span>
+                            <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+                            <input
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                                className="cf-input h-9 py-0 pl-8 text-xs"
+                                placeholder="Search projects"
+                            />
+                        </label>
+                        <select value={sort} onChange={(event) => setSort(event.target.value)} className="cf-input h-9 py-0 text-xs sm:w-44" aria-label="Sort projects">
+                            <option value="recent">Newest first</option>
+                            <option value="name">Name</option>
+                            <option value="oldest">Oldest first</option>
+                        </select>
+                    </div>
+
                     {projects.length === 0 ? (
                         <div className="cf-card">
                             <EmptyState
                                 icon="boxes"
-                                title="No projects yet"
-                                description="Projects collect environments such as production, staging and development."
+                                title="Your workspace starts with a project"
+                                description="Create a project to organize your applications, databases and deployment environments."
+                                action={
+                                    canCreate ? (
+                                        <a href="#new-project" className={buttonClass({ variant: 'primary', size: 'sm' })}>
+                                            <Icon name="plus" size={14} />
+                                            Create your first project
+                                        </a>
+                                    ) : null
+                                }
                             />
+                        </div>
+                    ) : visible.length === 0 ? (
+                        <div className="cf-card">
+                            <EmptyState icon="search" title="No projects match" description="Try a different project name." />
                         </div>
                     ) : (
                         <div className="grid gap-3 sm:grid-cols-2">
-                            {projects.map((project) => (
+                            {visible.map((project) => (
                                 <ProjectCard key={project.id} project={project} />
                             ))}
                         </div>
@@ -82,7 +184,7 @@ export default function ProjectsIndex({ projects, canCreate }) {
                 </div>
 
                 {canCreate ? (
-                    <aside>
+                    <aside id="new-project" className="scroll-mt-20">
                         <form onSubmit={submit} className="cf-card p-4">
                             <h2 className="text-sm font-semibold text-ink">New project</h2>
                             <p className="mt-0.5 text-xs text-faint">A production environment is created automatically.</p>
