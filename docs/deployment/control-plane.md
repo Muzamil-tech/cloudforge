@@ -81,6 +81,13 @@ registry attempt has a three-minute timeout so a blocked CDN cannot hold the
 command queue until the create command expires. Custom images can be pinned with
 `CLOUDFORGE_POSTGRES_IMAGE` and `CLOUDFORGE_REDIS_IMAGE`.
 
+A `resource.create` is idempotent. If an agent restarts after creating the
+container but before the control plane receives the result, the agent inspects
+the existing labeled container and recovers its password from the Docker
+configuration. The project and database pages expose **Recover credentials** (or
+**Retry provisioning** for a failed resource) so the volume does not have to be
+deleted. Starting a resource without credentials is rejected; recover it first.
+
 ### Using a private fork
 
 The public repository needs no credentials. If you deploy from a private fork,

@@ -33,6 +33,12 @@ class StartResource
                 ]);
             }
 
+            if ($locked->password === null) {
+                throw ValidationException::withMessages([
+                    'resource' => 'This resource has no credentials. Recover its credentials or provision it again.',
+                ]);
+            }
+
             $command = $this->commands->issue(
                 $server,
                 AgentOperation::ResourceStart,

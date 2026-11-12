@@ -40,6 +40,11 @@ class ResourcePolicy
         return $this->role($user, $resource->organization_id)?->canDeploy() ?? false;
     }
 
+    public function recover(User $user, Resource $resource): bool
+    {
+        return $this->role($user, $resource->organization_id)?->canDeploy() ?? false;
+    }
+
     public function delete(User $user, Resource $resource): bool
     {
         return $this->role($user, $resource->organization_id)?->canDeploy() ?? false;

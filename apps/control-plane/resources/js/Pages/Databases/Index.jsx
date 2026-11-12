@@ -257,6 +257,12 @@ export default function DatabasesIndex({ resources = [], resourceTypes = [], can
                                                         {resource.credentials_revealed ? 'View credentials' : 'Credentials'}
                                                     </button>
                                                 ) : null}
+                                                {resource.can_recover ? (
+                                                    <button type="button" onClick={() => resourceAction(resource, 'recover')} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                                                        <Icon name="refresh" size={12} />
+                                                        {resource.status === 'failed' ? 'Retry provisioning' : 'Recover credentials'}
+                                                    </button>
+                                                ) : null}
                                                 {resource.can_start ? (
                                                     <button type="button" onClick={() => resourceAction(resource, 'start')} className="rounded-md p-1.5 text-faint hover:bg-surface-raised hover:text-ink" aria-label={`Start ${resource.name}`}>
                                                         <Icon name="play" size={14} />

@@ -135,6 +135,7 @@ class ResourceProvisioningTest extends TestCase
 
         $resource = Resource::factory()
             ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
             ->create(['name' => 'main-db', 'status' => ResourceStatus::Stopped]);
 
         app(StartResource::class)->execute($resource, $owner);
@@ -171,6 +172,121 @@ class ResourceProvisioningTest extends TestCase
             'action' => AuditAction::ResourceDeleted->value,
             'organization_id' => $organization->id,
         ]);
+    }
+
+    public function test_a_credential_less_resource_cannot_be_started(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->create([
+                'name' => 'no-credentials',
+                'status' => ResourceStatus::Failed,
+                'password' => null,
+            ]);
+
+        $this->actingIn($organization, $owner)
+            ->post(route('resources.start', [$project, $resource]))
+            ->assertSessionHasErrors('resource');
+
+        $this->assertSame(ResourceStatus::Failed, $resource->refresh()->status);
+    }
+
+    public function test_a_credential_less_failed_resource_can_be_recovered(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->create([
+                'name' => 'lost-credentials',
+                'status' => ResourceStatus::Failed,
+                'password' => null,
+            ]);
+
+        $response = $this->actingIn($organization, $owner)
+            ->post(route('resources.recover', [$project, $resource]));
+
+        $response->assertRedirect();
+        $resource->refresh();
+
+        $this->assertSame(ResourceStatus::Provisioning, $resource->status);
+        $this->assertNotNull($resource->last_command_id);
+
+        $command = AgentCommand::query()
+            ->where('command_id', $resource->last_command_id)
+            ->sole();
+        $this->assertSame(AgentOperation::ResourceCreate, $command->operation);
+        $this->assertSame($resource->id, $command->payload['resource_id']);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::ResourceRecoveryRequested->value,
+            'organization_id' => $organization->id,
+        ]);
+    }
+
+    public function test_recovery_is_rejected_when_credentials_already_exist(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'healthy-db']);
+
+        $this->actingIn($organization, $owner)
+            ->post(route('resources.recover', [$project, $resource]))
+            ->assertSessionHasErrors('resource');
+
+        $this->assertSame(ResourceStatus::Active, $resource->refresh()->status);
+    }
+
+    public function test_viewers_cannot_recover_credentials(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+        $viewer = $this->memberWithRole($organization, OrganizationRole::Viewer);
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->create([
+                'name' => 'viewer-visible-db',
+                'status' => ResourceStatus::Failed,
+            ]);
+
+        $this->actingIn($organization, $viewer)
+            ->post(route('resources.recover', [$project, $resource]))
+            ->assertForbidden();
+
+        $this->assertSame(ResourceStatus::Failed, $resource->refresh()->status);
+    }
+
+    public function test_refresh_issues_an_inspect_command_without_a_server_error(): void
+    {
+        [$owner, $organization, $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->active()
+            ->create(['name' => 'refresh-db']);
+
+        $response = $this->actingIn($organization, $owner)
+            ->post(route('resources.refresh', [$project, $resource]));
+
+        $response->assertRedirect();
+        $resource->refresh();
+
+        $this->assertSame(ResourceStatus::Refreshing, $resource->status);
+
+        $command = AgentCommand::query()
+            ->where('command_id', $resource->last_command_id)
+            ->sole();
+        $this->assertSame(AgentOperation::ResourceInspect, $command->operation);
+
+        $result = ['status' => 'running', 'port' => 32768];
+        app(AgentCommandService::class)->complete($command, $server, true, $result);
+        app(HandleResourceCommandResult::class)->handle($command->refresh(), true, $result, null);
+
+        $this->assertSame(ResourceStatus::Active, $resource->refresh()->status);
     }
 
     public function test_agent_result_endpoint_activates_the_resource_and_scrubs_the_password(): void

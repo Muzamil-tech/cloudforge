@@ -88,11 +88,20 @@ class HandleResourceCommandResult
         $username = $result['username'] ?? null;
         $database = $result['database'] ?? null;
 
-        if (! is_string($password) || $password === ''
-            || ! is_numeric($port) || (int) $port < 1 || (int) $port > 65535
+        if (! is_string($password) || $password === '') {
+            $this->fail(
+                $resource,
+                $command,
+                'The agent did not return the database password. If the container exists, use Recover credentials; otherwise delete and provision the database again.',
+            );
+
+            return;
+        }
+
+        if (! is_numeric($port) || (int) $port < 1 || (int) $port > 65535
             || ! is_string($containerId) || $containerId === ''
             || ! is_string($host) || $host === '') {
-            $this->fail($resource, $command, 'The agent returned incomplete resource credentials.');
+            $this->fail($resource, $command, 'The agent returned incomplete resource connection details.');
 
             return;
         }

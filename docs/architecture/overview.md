@@ -267,14 +267,21 @@ organization server:
    issues a typed `resource.create` command. The payload contains only the
    resource UUID, type and generated container/volume names.
 3. The agent pulls the allowlisted image, creates a persistent named volume and
-   starts a container bound to `127.0.0.1` on a Docker-assigned port.
+   starts a container bound to `127.0.0.1` on a Docker-assigned port. Creation
+   is idempotent: if the container already exists with this resource's labels,
+   the agent inspects it, recovers its password and returns the same endpoint.
 4. The agent returns the generated credentials once. The control plane encrypts
    them in the resource row, marks the resource active and removes the password
-   from the generic agent command result.
+   from the generic agent command result. The agent store also redacts it; a
+   replay after a restart recovers it from the existing container.
 5. An authorized developer can view the credentials from the project page; every
-   view is audited. Start, stop, delete and refresh are separate typed commands.
+   view is audited. Start, stop, delete, refresh and credential recovery are
+   separate typed commands. Starting a resource with no stored password is
+   rejected.
 6. `resources:reconcile` runs every minute and fails a resource whose command
-   expired or completed without a usable result.
+   expired, whose command is missing or whose command completed without a usable
+   result. It also expires the command record so the ledger matches the resource
+   state.
 
 Resource deletion removes the container and its named volume. Project,
 environment and server deletion are blocked while non-deleted resources still

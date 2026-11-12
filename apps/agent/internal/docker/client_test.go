@@ -177,6 +177,8 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 			calls = append(calls, request.Method+" "+request.URL.Path)
 
 			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/cloudforge-01a1d058-8612-7209-9082-03adf0d11976/json":
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
 			case request.Method == http.MethodGet && request.URL.Path == "/images/postgres:16-alpine/json":
 				return jsonResponse(t, http.StatusOK, `{}`), nil
 			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
@@ -233,7 +235,7 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 		t.Fatalf("unexpected binds %#v", hostConfig["Binds"])
 	}
 
-	if len(calls) != 4 {
+	if len(calls) != 5 {
 		t.Fatalf("unexpected calls %#v", calls)
 	}
 }
@@ -246,6 +248,8 @@ func TestPrepareImageFallsBackToMirrorWhenDockerHubBlobIsBlocked(t *testing.T) {
 	client := &Client{
 		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/cloudforge-01a1d058-8612-7209-9082-03adf0d11976/json":
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
 			case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/images/") && strings.HasSuffix(request.URL.Path, "/json"):
 				return jsonResponse(t, http.StatusNotFound, `{}`), nil
 			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
@@ -367,6 +371,179 @@ func TestCleanPullMessageRemovesSignedRegistryUrls(t *testing.T) {
 
 	if !strings.Contains(message, "registry denied or network blocked") {
 		t.Fatalf("unexpected message %q", message)
+	}
+}
+
+func TestCreateResourceRecoversAnExistingManagedContainer(t *testing.T) {
+	t.Parallel()
+
+	var pulled bool
+	var created bool
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/cloudforge-01a1d058-8612-7209-9082-03adf0d11976/json":
+				return jsonResponse(t, http.StatusOK, `{
+					"Id":"existing-container",
+					"Config":{
+						"Image":"mirror.gcr.io/library/postgres:16-alpine",
+						"Env":["POSTGRES_USER=cloudforge","POSTGRES_PASSWORD=recovered-secret","POSTGRES_DB=cloudforge"],
+						"Labels":{"cloudforge.managed":"true","cloudforge.resource_id":"01a1d058-8612-7209-9082-03adf0d11976","cloudforge.resource_type":"postgresql"}
+					},
+					"State":{"Running":true,"Status":"running"},
+					"NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"32771"}]}}
+				}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
+				pulled = true
+
+				return jsonResponse(t, http.StatusOK, `{"status":"Image is up to date"}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
+				created = true
+
+				return jsonResponse(t, http.StatusCreated, `{"Id":"new-container"}`), nil
+			default:
+				t.Errorf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			}
+		})},
+	}
+
+	endpoint, err := client.Create(context.Background(), resources.CreateSpec{
+		ID:            "01a1d058-8612-7209-9082-03adf0d11976",
+		Kind:          resources.Postgres,
+		ContainerName: "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		VolumeName:    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	})
+	if err != nil {
+		t.Fatalf("recover existing resource: %v", err)
+	}
+
+	if pulled || created {
+		t.Fatal("an existing managed container must not be pulled or recreated")
+	}
+
+	if endpoint.Password != "recovered-secret" || endpoint.Port != 32771 || endpoint.ContainerID != "existing-container" {
+		t.Fatalf("unexpected recovered endpoint %#v", endpoint)
+	}
+}
+
+func TestCreateResourceRecoversAStoppedManagedContainer(t *testing.T) {
+	t.Parallel()
+
+	inspections := 0
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/cloudforge-01a1d058-8612-7209-9082-03adf0d11976/json":
+				inspections++
+				running := inspections > 1
+
+				return jsonResponse(t, http.StatusOK, fmt.Sprintf(`{
+					"Id":"existing-container",
+					"Config":{
+						"Env":["POSTGRES_PASSWORD=recovered-secret"],
+						"Labels":{"cloudforge.managed":"true","cloudforge.resource_id":"01a1d058-8612-7209-9082-03adf0d11976","cloudforge.resource_type":"postgresql"}
+					},
+					"State":{"Running":%t,"Status":"running"},
+					"NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"32772"}]}}
+				}`, running)), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/existing-container/start":
+				return jsonResponse(t, http.StatusNoContent, ""), nil
+			default:
+				t.Errorf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			}
+		})},
+	}
+
+	endpoint, err := client.Create(context.Background(), resources.CreateSpec{
+		ID:            "01a1d058-8612-7209-9082-03adf0d11976",
+		Kind:          resources.Postgres,
+		ContainerName: "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		VolumeName:    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	})
+	if err != nil {
+		t.Fatalf("recover stopped resource: %v", err)
+	}
+
+	if endpoint.Password != "recovered-secret" || endpoint.Port != 32772 {
+		t.Fatalf("unexpected recovered endpoint %#v", endpoint)
+	}
+
+	if inspections != 2 {
+		t.Fatalf("expected the container to be inspected before and after start, got %d", inspections)
+	}
+}
+
+func TestCreateResourceRejectsAContainerOwnedByAnotherResource(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.Method != http.MethodGet || request.URL.Path != "/containers/cloudforge-01a1d058-8612-7209-9082-03adf0d11976/json" {
+				t.Fatalf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+			}
+
+			return jsonResponse(t, http.StatusOK, `{
+				"Id":"someone-elses-container",
+				"Config":{
+					"Env":["POSTGRES_PASSWORD=not-yours"],
+					"Labels":{"cloudforge.managed":"true","cloudforge.resource_id":"01a1d058-8612-7209-9082-03adf0d11977","cloudforge.resource_type":"postgresql"}
+				},
+				"State":{"Running":true,"Status":"running"},
+				"NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"32773"}]}}
+			}`), nil
+		})},
+	}
+
+	_, err := client.Create(context.Background(), resources.CreateSpec{
+		ID:            "01a1d058-8612-7209-9082-03adf0d11976",
+		Kind:          resources.Postgres,
+		ContainerName: "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		VolumeName:    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not managed by resource") {
+		t.Fatalf("expected an ownership error, got %v", err)
+	}
+}
+
+func TestExistingPasswordReadsContainerConfiguration(t *testing.T) {
+	t.Parallel()
+
+	postgres := containerInspect{}
+	postgres.Config.Env = []string{"POSTGRES_USER=cloudforge", "POSTGRES_PASSWORD=pg-secret"}
+
+	password, err := existingPassword(resources.Postgres, postgres)
+	if err != nil || password != "pg-secret" {
+		t.Fatalf("unexpected PostgreSQL password %q, %v", password, err)
+	}
+
+	redis := containerInspect{}
+	redis.Config.Cmd = []string{"redis-server", "--appendonly", "yes", "--requirepass", "redis-secret"}
+
+	password, err = existingPassword(resources.Redis, redis)
+	if err != nil || password != "redis-secret" {
+		t.Fatalf("unexpected Redis password %q, %v", password, err)
+	}
+
+	redisEqual := containerInspect{}
+	redisEqual.Config.Cmd = []string{"redis-server", "--requirepass=other-secret"}
+
+	password, err = existingPassword(resources.Redis, redisEqual)
+	if err != nil || password != "other-secret" {
+		t.Fatalf("unexpected Redis --requirepass= password %q, %v", password, err)
+	}
+
+	if _, err := existingPassword(resources.Postgres, containerInspect{}); err == nil {
+		t.Fatal("expected a missing PostgreSQL password to be rejected")
+	}
+
+	if _, err := existingPassword(resources.Redis, containerInspect{}); err == nil {
+		t.Fatal("expected a missing Redis password to be rejected")
 	}
 }
 

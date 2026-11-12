@@ -105,4 +105,10 @@ class Resource extends Model
         return $this->status === ResourceStatus::Active
             && $this->password !== null;
     }
+
+    public function canRecoverCredentials(): bool
+    {
+        return $this->password === null
+            && in_array($this->status, [ResourceStatus::Failed, ResourceStatus::Active, ResourceStatus::Stopped], true);
+    }
 }

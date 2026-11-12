@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('projects/{project}/resources/{resource}/start', [ResourceController::class, 'start'])->name('resources.start');
         Route::post('projects/{project}/resources/{resource}/stop', [ResourceController::class, 'stop'])->name('resources.stop');
         Route::post('projects/{project}/resources/{resource}/refresh', [ResourceController::class, 'refresh'])->name('resources.refresh');
+        Route::post('projects/{project}/resources/{resource}/recover', [ResourceController::class, 'recover'])->name('resources.recover');
         Route::post('projects/{project}/resources/{resource}/reveal', [ResourceController::class, 'reveal'])->name('resources.reveal');
         Route::delete('projects/{project}/resources/{resource}', [ResourceController::class, 'destroy'])->name('resources.destroy');
 

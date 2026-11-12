@@ -400,6 +400,154 @@ func TestHandleFailsAnInterruptedExecutionWithoutRepeatingIt(t *testing.T) {
 	}
 }
 
+func TestHandleRecoversAnInterruptedCreate(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{
+		endpoint: resources.Endpoint{
+			ContainerID: "container-123",
+			Host:        "127.0.0.1",
+			Port:        32768,
+			Username:    "cloudforge",
+			Database:    "cloudforge",
+			Password:    "recovered-secret",
+			Status:      "running",
+		},
+	}
+	executor, store := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	if err := store.Put(Outcome{
+		CommandID:   "cmd-create-interrupted",
+		Operation:   OperationResourceCreate,
+		Status:      OutcomeExecuting,
+		CompletedAt: testNow.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+
+	cmd := command("cmd-create-interrupted", OperationResourceCreate, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+		"resource_type":  "postgresql",
+		"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		"volume_name":    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(resourceManager.calls) != 1 || resourceManager.calls[0] != "create" {
+		t.Fatalf("expected the idempotent create to be retried, got %#v", resourceManager.calls)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeCompleted {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if runner.results[0].Result.Result["password"] != "recovered-secret" {
+		t.Fatalf("the recovered result must include the password: %#v", runner.results[0].Result.Result)
+	}
+
+	stored, ok := store.Get("cmd-create-interrupted")
+	if !ok || stored.Status != OutcomeCompleted {
+		t.Fatalf("unexpected stored outcome %#v", stored)
+	}
+
+	if _, ok := stored.Result["password"]; ok {
+		t.Fatal("the durable agent store must not retain the recovered password")
+	}
+}
+
+func TestHandleRecoversACompletedCreateWhosePasswordWasRedacted(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{
+		endpoint: resources.Endpoint{
+			ContainerID: "container-123",
+			Host:        "127.0.0.1",
+			Port:        32768,
+			Username:    "cloudforge",
+			Database:    "cloudforge",
+			Password:    "recovered-secret",
+			Status:      "running",
+		},
+	}
+	executor, store := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	if err := store.Put(Outcome{
+		CommandID:   "cmd-create-redacted",
+		Operation:   OperationResourceCreate,
+		Status:      OutcomeCompleted,
+		Result:      map[string]any{"container_id": "container-123"},
+		CompletedAt: testNow.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+
+	cmd := command("cmd-create-redacted", OperationResourceCreate, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+		"resource_type":  "postgresql",
+		"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		"volume_name":    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(resourceManager.calls) != 1 || resourceManager.calls[0] != "create" {
+		t.Fatalf("expected the idempotent create to recover the password, got %#v", resourceManager.calls)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeCompleted {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if runner.results[0].Result.Result["password"] != "recovered-secret" {
+		t.Fatalf("the recovered result must include the password: %#v", runner.results[0].Result.Result)
+	}
+}
+
+func TestHandleDoesNotRetryAFailedCreate(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{}
+	executor, store := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	if err := store.Put(Outcome{
+		CommandID:    "cmd-create-failed",
+		Operation:    OperationResourceCreate,
+		Status:       OutcomeFailed,
+		ErrorMessage: "registry blocked",
+		CompletedAt:  testNow.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+
+	cmd := command("cmd-create-failed", OperationResourceCreate, testNow.Add(time.Minute))
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(resourceManager.calls) != 0 {
+		t.Fatalf("a failed create must not be retried, got %#v", resourceManager.calls)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeFailed {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if !strings.Contains(runner.results[0].Result.ErrorMessage, "registry blocked") {
+		t.Fatalf("unexpected error %q", runner.results[0].Result.ErrorMessage)
+	}
+}
+
 func TestHandleRemovesTheMarkerWhenAcknowledgementFails(t *testing.T) {
 	t.Parallel()
 

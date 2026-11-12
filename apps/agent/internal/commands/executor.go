@@ -103,7 +103,7 @@ func (e *Executor) Handle(ctx context.Context, command protocol.Command) error {
 			"status", stored.Status,
 		)
 
-		return e.replay(ctx, stored)
+		return e.replay(ctx, command, stored)
 	}
 
 	expiresAt, err := time.Parse(time.RFC3339, command.ExpiresAt)
@@ -349,7 +349,40 @@ func (e *Executor) health(ctx context.Context) map[string]any {
 	return result
 }
 
-func (e *Executor) replay(ctx context.Context, outcome Outcome) error {
+func (e *Executor) replay(ctx context.Context, command protocol.Command, outcome Outcome) error {
+	if shouldRecoverCreate(outcome) {
+		// A create is idempotent: an existing managed container is inspected
+		// and its password is recovered. Re-run it when the stored outcome is
+		// an interrupted execution or a completed result whose password was
+		// deliberately redacted from the agent store. Otherwise the control
+		// plane would receive a successful result with no credentials.
+		e.log.Info("recovering a managed resource create",
+			"command_id", command.ID,
+			"operation", command.Operation,
+			"stored_status", outcome.Status,
+		)
+
+		started := e.now()
+		outcome = e.execute(ctx, command)
+		outcome.DurationMS = e.now().Sub(started).Milliseconds()
+		outcome.CompletedAt = e.now().UTC()
+
+		if err := e.store.Put(redactOutcomeForStore(outcome)); err != nil {
+			e.log.Error("persist recovered command outcome",
+				"command_id", command.ID,
+				"error", err,
+			)
+		}
+
+		if err := e.reportResult(outcome); err != nil {
+			return err
+		}
+
+		e.triggerRestart(outcome)
+
+		return nil
+	}
+
 	if outcome.Status == OutcomeExecuting {
 		outcome.Status = OutcomeFailed
 		outcome.ErrorMessage = "the agent stopped before this command completed; the operation was not repeated"
@@ -367,6 +400,20 @@ func (e *Executor) replay(ctx context.Context, outcome Outcome) error {
 	e.triggerRestart(outcome)
 
 	return nil
+}
+
+func shouldRecoverCreate(outcome Outcome) bool {
+	if outcome.Operation != OperationResourceCreate {
+		return false
+	}
+
+	if outcome.Status != OutcomeExecuting && outcome.Status != OutcomeCompleted {
+		return false
+	}
+
+	password, ok := outcome.Result["password"].(string)
+
+	return !ok || password == ""
 }
 
 func (e *Executor) finish(ctx context.Context, outcome Outcome) error {

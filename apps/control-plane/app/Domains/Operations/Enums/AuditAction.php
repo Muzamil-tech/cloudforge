@@ -40,6 +40,7 @@ enum AuditAction: string
     case ResourceStopped = 'resource.stopped';
     case ResourceDeleted = 'resource.deleted';
     case ResourceFailed = 'resource.failed';
+    case ResourceRecoveryRequested = 'resource.recovery_requested';
     case ResourceCredentialsRevealed = 'resource.credentials_revealed';
     case AgentCommandIssued = 'agent_command.issued';
     case AgentCommandAcknowledged = 'agent_command.acknowledged';

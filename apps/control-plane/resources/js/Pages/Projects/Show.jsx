@@ -95,6 +95,12 @@ function ResourceRow({ resource, onAction, onReveal, onRemove }) {
                         {resource.credentials_revealed ? 'View credentials' : 'Credentials'}
                     </button>
                 ) : null}
+                {resource.can_recover ? (
+                    <button type="button" onClick={() => onAction(resource, 'recover')} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                        <Icon name="refresh" size={12} />
+                        {resource.status === 'failed' ? 'Retry provisioning' : 'Recover credentials'}
+                    </button>
+                ) : null}
                 {resource.can_start ? (
                     <button type="button" onClick={() => onAction(resource, 'start')} className="rounded-md p-1.5 text-faint hover:bg-surface-raised hover:text-ink" aria-label={`Start ${resource.name}`}>
                         <Icon name="play" size={14} />

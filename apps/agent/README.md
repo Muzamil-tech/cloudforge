@@ -206,6 +206,14 @@ blocked CDN cannot hold the command queue for the whole create TTL. An operator
 can pin an internal registry with `CLOUDFORGE_POSTGRES_IMAGE` and
 `CLOUDFORGE_REDIS_IMAGE` in `/etc/cloudforge/agent.env`.
 
+A `resource.create` is idempotent. If a container with the resource's name and
+`cloudforge.managed` labels already exists, the agent starts it when necessary,
+reads the password from `POSTGRES_PASSWORD` or `--requirepass` in the container
+configuration, and returns the same endpoint. This lets a retry, a stale replay
+or a credential-recovery command work without deleting the persistent volume.
+The generated password is still redacted from the agent's durable command store;
+recovery reads the Docker configuration rather than storing the secret again.
+
 ## Certificate rotation
 
 The agent checks its certificate every 12 hours. Inside the rotation window

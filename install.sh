@@ -865,7 +865,7 @@ build_agent() {
         cd "$APP_DIR/apps/agent"
         CGO_ENABLED=0 GOOS=linux GOARCH="$arch" "$GO_ROOT/bin/go" build \
             -trimpath \
-            -ldflags "-s -w -X main.version=${CLOUDFORGE_VERSION:-1.2.1}" \
+            -ldflags "-s -w -X main.version=${CLOUDFORGE_VERSION:-1.2.2}" \
             -o "$AGENT_BINARY" \
             ./cmd/cloudforge-agent
     )

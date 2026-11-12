@@ -9,6 +9,7 @@ use App\Domains\Projects\Models\Environment;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Resources\Actions\CreateResource;
 use App\Domains\Resources\Actions\DeleteResource;
+use App\Domains\Resources\Actions\RecoverResource;
 use App\Domains\Resources\Actions\RefreshResource;
 use App\Domains\Resources\Actions\StartResource;
 use App\Domains\Resources\Actions\StopResource;
@@ -137,6 +138,21 @@ class ResourceController extends Controller
         $refreshResource->execute($resource, $request->user());
 
         return back()->with('success', 'Resource state refresh requested.');
+    }
+
+    public function recover(
+        Request $request,
+        Project $project,
+        Resource $resource,
+        OrganizationContext $organizationContext,
+        RecoverResource $recoverResource,
+    ): RedirectResponse {
+        $this->authorizeResource($request, $project, $resource, $organizationContext);
+        Gate::authorize('recover', $resource);
+
+        $recoverResource->execute($resource, $request->user());
+
+        return back()->with('success', "{$resource->name} is being recovered. An existing container keeps its credentials.");
     }
 
     public function reveal(

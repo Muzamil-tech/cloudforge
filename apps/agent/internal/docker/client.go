@@ -164,7 +164,10 @@ func (c *Client) Inspect(ctx context.Context) (protocol.DockerSummary, []protoco
 }
 
 // Create provisions one allowlisted database container and returns its
-// connection details once. The generated password is never logged.
+// connection details once. The generated password is never logged. Creating
+// the same resource again is idempotent: an existing managed container is
+// inspected and its password is recovered, so a replay or retry never requires
+// deleting a working database.
 func (c *Client) Create(ctx context.Context, spec resources.CreateSpec) (resources.Endpoint, error) {
 	if err := validateSpec(spec); err != nil {
 		return resources.Endpoint{}, err
@@ -181,6 +184,15 @@ func (c *Client) Create(ctx context.Context, spec resources.CreateSpec) (resourc
 		defaultImage(c.postgresImage, "postgres:16-alpine"),
 		defaultImage(c.redisImage, "redis:7-alpine"),
 	)
+
+	existing, found, err := c.recoverExisting(ctx, spec, containerPort, username, database)
+	if err != nil {
+		return resources.Endpoint{}, err
+	}
+
+	if found {
+		return existing, nil
+	}
 
 	resolvedImage, err := c.prepareImage(ctx, spec.Kind, image)
 	if err != nil {
@@ -208,6 +220,14 @@ func (c *Client) Create(ctx context.Context, spec resources.CreateSpec) (resourc
 
 	created, err := c.createContainer(ctx, spec.ContainerName, config)
 	if err != nil {
+		// A previous interrupted attempt or a concurrent retry may have won
+		// the race. Recover that container instead of reporting a false
+		// provisioning failure.
+		existing, found, recoverErr := c.recoverExisting(ctx, spec, containerPort, username, database)
+		if recoverErr == nil && found {
+			return existing, nil
+		}
+
 		return resources.Endpoint{}, err
 	}
 
@@ -234,6 +254,97 @@ func (c *Client) Create(ctx context.Context, spec resources.CreateSpec) (resourc
 		Password:    password,
 		Status:      "running",
 	}, nil
+}
+
+// recoverExisting returns the endpoint for a container that already belongs to
+// this resource. It verifies the ownership labels and reads the password from
+// the container configuration, which is the only durable copy after the agent
+// redacts a completed create result from its local store.
+func (c *Client) recoverExisting(
+	ctx context.Context,
+	spec resources.CreateSpec,
+	containerPort int,
+	username string,
+	database string,
+) (resources.Endpoint, bool, error) {
+	inspect, err := c.inspectContainer(ctx, spec.ContainerName)
+	if errors.Is(err, ErrNotFound) {
+		return resources.Endpoint{}, false, nil
+	}
+
+	if err != nil {
+		return resources.Endpoint{}, false, err
+	}
+
+	if inspect.Config.Labels["cloudforge.managed"] != "true" ||
+		inspect.Config.Labels["cloudforge.resource_id"] != spec.ID ||
+		inspect.Config.Labels["cloudforge.resource_type"] != string(spec.Kind) {
+		return resources.Endpoint{}, false, fmt.Errorf(
+			"container %q already exists but is not managed by resource %s",
+			spec.ContainerName,
+			spec.ID,
+		)
+	}
+
+	password, err := existingPassword(spec.Kind, inspect)
+	if err != nil {
+		return resources.Endpoint{}, false, err
+	}
+
+	if !inspect.State.Running {
+		if err := c.startContainer(ctx, inspect.ID); err != nil {
+			return resources.Endpoint{}, false, fmt.Errorf("start the existing managed container: %w", err)
+		}
+
+		inspect, err = c.inspectContainer(ctx, spec.ContainerName)
+		if err != nil {
+			return resources.Endpoint{}, false, err
+		}
+	}
+
+	port, err := inspect.boundPort(containerPort)
+	if err != nil {
+		return resources.Endpoint{}, false, err
+	}
+
+	return resources.Endpoint{
+		ContainerID: inspect.ID,
+		Host:        "127.0.0.1",
+		Port:        port,
+		Username:    username,
+		Database:    database,
+		Password:    password,
+		Status:      "running",
+	}, true, nil
+}
+
+func existingPassword(kind resources.Kind, inspect containerInspect) (string, error) {
+	switch kind {
+	case resources.Postgres:
+		for _, value := range inspect.Config.Env {
+			if password, ok := strings.CutPrefix(value, "POSTGRES_PASSWORD="); ok && password != "" {
+				return password, nil
+			}
+		}
+
+		return "", errors.New("the existing PostgreSQL container has no recoverable password")
+
+	case resources.Redis:
+		for index, value := range inspect.Config.Cmd {
+			if value == "--requirepass" && index+1 < len(inspect.Config.Cmd) && inspect.Config.Cmd[index+1] != "" {
+				return inspect.Config.Cmd[index+1], nil
+			}
+
+			if password, ok := strings.CutPrefix(value, "--requirepass="); ok && password != "" {
+				return password, nil
+			}
+		}
+
+		return "", errors.New("the existing Redis container has no recoverable password")
+
+	default:
+		return "", fmt.Errorf("resource type %q is not supported", kind)
+	}
 }
 
 func (c *Client) Start(ctx context.Context, containerRef string) error {
@@ -668,7 +779,14 @@ type containerCreateResponse struct {
 }
 
 type containerInspect struct {
-	ID    string `json:"Id"`
+	ID     string `json:"Id"`
+	Name   string `json:"Name"`
+	Config struct {
+		Image  string            `json:"Image"`
+		Env    []string          `json:"Env"`
+		Cmd    []string          `json:"Cmd"`
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
 	State struct {
 		Running bool   `json:"Running"`
 		Status  string `json:"Status"`

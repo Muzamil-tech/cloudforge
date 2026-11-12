@@ -5,6 +5,7 @@ namespace App\Domains\Resources\Actions;
 use App\Domains\Identity\Models\User;
 use App\Domains\Operations\Enums\AgentOperation;
 use App\Domains\Operations\Services\AgentCommandService;
+use App\Domains\Resources\Enums\ResourceStatus;
 use App\Domains\Resources\Models\Resource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;

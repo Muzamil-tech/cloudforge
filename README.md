@@ -30,8 +30,13 @@ reuses a local image first, then tries `mirror.gcr.io` before Docker Hub and
 falls back to `public.ecr.aws`. An internal registry can be pinned with
 `CLOUDFORGE_POSTGRES_IMAGE` and `CLOUDFORGE_REDIS_IMAGE`.
 
+Creating the same resource again is idempotent. If an agent restart loses a
+completed create result, the agent inspects the existing labeled container and
+recovers its password instead of requiring the volume to be deleted. The UI
+exposes **Recover credentials** / **Retry provisioning** for that case.
+
 Existing installations must rerun the installer to update the control plane and
-agent to the resource-capable build (`v1.2.1` or later).
+agent to the resource-capable build (`v1.2.2` or later).
 
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
@@ -112,10 +117,10 @@ go build -o cloudforge-agent ./cmd/cloudforge-agent
 Release archives are published as GitHub releases:
 
 ```sh
-VERSION=1.2.1 sh packaging/package.sh
+VERSION=1.2.2 sh packaging/package.sh
 ```
 
-Release `v1.2.1` contains `cloudforge-agent_linux_amd64.tar.gz`,
+Release `v1.2.2` contains `cloudforge-agent_linux_amd64.tar.gz`,
 `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
 `Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
 release automatically.
