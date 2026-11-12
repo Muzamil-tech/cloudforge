@@ -84,7 +84,7 @@ or token from the dashboard.
 | 18 | Onboarding and server UI | Five unclaimed nodes with name, hostname, machine-id prefix, status, enrollment state, token expiry; bootstrap badge, origin and claimed timestamp | `BootstrapWebTest`; `npm run build` | Automated response assertions pass. No real-browser click-through. |
 | 19 | Documentation | Architecture, API, agent protocol, installation, deployment, plan and this progress file | Link audit; manual review | Written and locally checked. |
 | 20 | Preserve Phase 1 functionality | Full PHP suite, Go suite, shell harness and frontend build | See command evidence | Tested locally. |
-| 21 | Three VPS nodes registered | Requires real VPS hosts and published release assets | None | **Not verified.** No VPS available. |
+| 21 | Three VPS nodes registered | Requires real VPS hosts | None | **Not verified.** No VPS available. |
 | 22 | Real Docker inventory | Agent talks to a real Docker daemon | Fake Docker server tests only | **Not verified.** No Docker available. |
 | 23 | One-command clean-VPS installation | Root `install.sh` provisions PHP, PostgreSQL, Redis, Nginx, Node, Docker, Composer, TLS, the dashboard, scheduler, queue worker and the source-built agent | `InstallerScriptTest`; `one_command_installer_test.sh`; `installer_test.sh` | Tested locally. No clean VPS run. |
 
@@ -153,8 +153,8 @@ These are deliberate gaps, not hidden failures:
 - No real browser session. Inertia responses and props are asserted in feature
   tests; no browser click-through or visual review was performed.
 - No three-node enrollment; the Phase 1 acceptance criterion remains open.
-- No published GitHub release. Archives were built locally but not uploaded, so
-  the installer's default download URL has not been exercised.
+- Release assets `v1.0.0` are published, but the installer's live download path
+  has not been exercised from a VPS.
 - `agent.env` mode `0600` could not be confirmed on Windows; the harness skips
   that assertion. Linux CI must run it.
 
@@ -163,7 +163,7 @@ These are deliberate gaps, not hidden failures:
 Code, local automated tests, shell checks and the frontend build are complete.
 The milestone is **not** "Verified in real infrastructure". Phase 2 must not
 start until the Phase 1 acceptance run is performed on real VPS hosts with real
-Docker, PostgreSQL, DNS, TLS and published release assets.
+Docker, PostgreSQL, DNS and TLS.
 
 ---
 

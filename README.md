@@ -95,16 +95,16 @@ go vet ./...
 go build -o cloudforge-agent ./cmd/cloudforge-agent
 ```
 
-Release archives consumed by the installer:
+Release archives are published as GitHub releases:
 
 ```sh
 VERSION=1.0.0 sh packaging/package.sh
 ```
 
-The archives are not published yet, so the default `curl | sh` installer path
-requires a GitHub release containing
-`cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and
-`SHA256SUMS`.
+Release `v1.0.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
+`cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
+`Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
+release automatically.
 
 ## Verification
 

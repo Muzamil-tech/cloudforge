@@ -37,16 +37,19 @@ curl -fsSL https://your-control-plane/install.sh | sudo \
 
 It downloads the release, verifies `SHA256SUMS`, creates the `cloudforge-agent` user, enrolls, installs the systemd unit, and starts the service. Requires Linux, systemd, root, and Docker for Docker inventory.
 
-### Important caveat
-
-The installer pulls release archives from GitHub Releases. Those archives are **not published yet**, so the `curl | sh` path won't work until you publish them:
+Release archives are published on GitHub Releases. The v1.0.0 release contains
+`cloudforge-agent_linux_amd64.tar.gz`,
+`cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
+`Muzamil-tech/cloudforge`. The installer resolves the latest release
+automatically. To rebuild locally:
 
 ```sh
-cd apps\agent
-make package VERSION=1.0.0
+cd apps/agent
+VERSION=1.0.0 sh packaging/package.sh
 ```
 
-That produces `dist/cloudforge-agent_linux_amd64.tar.gz`, `dist/cloudforge-agent_linux_arm64.tar.gz`, and `dist/SHA256SUMS`, which need uploading to a GitHub release under `Muzamil-tech/cloudforge`. Until then, install the agent from source:
+The generated archives are in `apps/agent/dist/`. Source installation remains
+available as an alternative:
 
 ```sh
 cd apps/agent
@@ -64,4 +67,5 @@ sudo ./cloudforge-agent run \
   --data-dir /var/lib/cloudforge-agent
 ```
 
-I'm currently finishing the deployment docs and installation guide in `docs/`, which will include the exact production steps.
+Production steps are in `docs/deployment/control-plane.md`; agent details are in
+`docs/agent/installation.md`.
