@@ -171,6 +171,12 @@ These are deliberate gaps, not hidden failures:
 - The resource layer has never created a real container. Docker image pull,
   loopback port binding, persistent volumes, credential use and deletion are
   unverified on a VPS.
+- The agent executes one command at a time. A slow image pull delays queued
+  start, stop and delete commands; the pull is now bounded, but there is no
+  concurrent command execution.
+- Reachability of `mirror.gcr.io`, Docker Hub and `public.ecr.aws` from the
+  target VPS is unverified. The agent logs each registry attempt so the actual
+  path can be checked from the journal.
 - No MySQL resource, application attachment, backup or restore is implemented.
 - No real DNS or TLS. Enrollment over a public HTTPS endpoint, certificate
   chains, reverse-proxy client-certificate forwarding and rate limiting behind a
