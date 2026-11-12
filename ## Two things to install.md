@@ -6,6 +6,11 @@ CloudForge has a **control plane** (Laravel app) and an **agent** (Go binary on 
 
 Prerequisites: PHP 8.4, Composer, Node 20+, SQLite (default) or PostgreSQL, Redis optional.
 
+curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/install.sh \
+ | CLOUDFORGE_DOMAIN=cloud.manzomaa.com \
+ CLOUDFORGE_ACME_EMAIL=muzamil@manzomaa.com \
+ bash
+
 ```powershell
 cd apps\control-plane
 composer install

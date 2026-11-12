@@ -686,7 +686,6 @@ export default function ProjectsShow({
                             <option value="">All activity</option>
                             <option value="resource.">Databases</option>
                             <option value="project.">Project</option>
-                            <option value="environment">Environments</option>
                         </select>
                     }
                 >

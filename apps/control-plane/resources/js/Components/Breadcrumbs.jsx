@@ -12,7 +12,7 @@ const labels = {
 };
 
 function isUuid(value) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 export function Breadcrumbs({ path, title }) {
@@ -24,7 +24,9 @@ export function Breadcrumbs({ path, title }) {
     segments.forEach((segment, index) => {
         href += `/${segment}`;
         const isLast = index === segments.length - 1;
-        const label = isLast && title ? title : labels[segment] ?? (isUuid(segment) ? 'Details' : segment);
+        const label = isUuid(segment)
+            ? title ?? 'Details'
+            : labels[segment] ?? (isLast && title ? title : segment);
 
         items.push({ label, href: isLast ? null : href });
     });

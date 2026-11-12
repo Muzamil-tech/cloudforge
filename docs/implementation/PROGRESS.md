@@ -100,7 +100,7 @@ or token from the dashboard.
 | Command | Result |
 | --- | --- |
 | `vendor/bin/pint --format agent` | Formatted four files; the rerun reports `passed`. |
-| `php artisan test --compact` | Final full run: 190 tests passed, 1,415 assertions, 229.4 seconds. |
+| `php artisan test --compact` | Final full run: 195 tests passed, 1,535 assertions, 274.3 seconds. |
 | `php artisan test --compact tests/Feature/InstallerScriptTest.php tests/Feature/BootstrapCommandTest.php` | 12 tests passed, 57 assertions after the final shell edits. |
 | `bash -n install.sh` | Parsed without error. |
 | `bash tests/shell/one_command_installer_test.sh install.sh` | 20 assertions, 0 failures. |
@@ -110,15 +110,16 @@ or token from the dashboard.
 | `go test ./...` | All packages passed; `internal/agent` 4.2s, `internal/client` 6.2s, `internal/enrollment` 6.7s. |
 | `go vet ./...` | No findings. |
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
-| `npm run build` | Vite 8.3.8 built 608 modules; JS 470.74 kB (gzip 135.76 kB), CSS 81.72 kB (gzip 15.93 kB). |
+| `npm run build` | Vite 8.3.8 built 617 modules; lazy page chunks, main JS 361.61 kB (gzip 112.96 kB), CSS 87.02 kB (gzip 16.80 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
 | GitHub release `v1.0.0` | Three assets uploaded; the latest download URLs return HTTP 200. |
 | GitHub release `v1.1.0` | Managed-resource agent assets uploaded; latest download URLs return HTTP 200. |
 | `go test`/`go vet` after machine-id override | Passed. The new override and invalid-value tests are in `internal/enrollment/enrollment_test.go`. |
 
-The final full PHP suite, after the one-command installer, resource layer and
-status-path changes, passed with the counts above. The targeted installer,
-resource and command tests also pass after the last shell and policy edits.
+The final full PHP suite, after the installer, resource layer, project workspace
+and UI shell changes, passed with the counts above. The targeted installer,
+resource, project and command tests also pass after the last shell and policy
+edits.
 
 ### Defects found and fixed during Milestone 1 verification
 
