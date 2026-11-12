@@ -199,8 +199,9 @@ install_base_packages() {
     export DEBIAN_FRONTEND=noninteractive
 
     say "installing base packages"
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    wait_for_apt_lock
+    apt_get update
+    apt_get install -y --no-install-recommends \
         apt-transport-https \
         ca-certificates \
         cron \
@@ -221,8 +222,38 @@ install_base_packages() {
     systemctl enable --now cron postgresql redis-server nginx
 }
 
+apt_get() {
+    apt-get -o DPkg::Lock::Timeout=600 "$@"
+}
+
+wait_for_apt_lock() {
+    local attempts=0
+
+    # A fresh Ubuntu host often starts unattended-upgrades during the first
+    # boot. Stop the service and wait for any running apt/dpkg process before
+    # taking the lock; the apt timeout below covers a process that starts again.
+    systemctl stop unattended-upgrades.service 2>/dev/null || true
+    systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+
+    while pgrep -f 'unattended-upgr|apt-get|/dpkg( |$)' >/dev/null 2>&1; do
+        attempts=$((attempts + 1))
+
+        if [ "$attempts" -ge 300 ]; then
+            fail "the package manager is still locked; stop unattended-upgrades and retry"
+        fi
+
+        if [ "$attempts" -eq 1 ]; then
+            say "waiting for the package manager lock"
+        fi
+
+        sleep 2
+    done
+}
+
 install_php() {
     say "installing PHP ${PHP_VERSION}"
+
+    wait_for_apt_lock
 
     if [ "$OS_ID" = "ubuntu" ]; then
         add-apt-repository -y ppa:ondrej/php
@@ -234,8 +265,8 @@ install_php() {
             "$OS_CODENAME" >/etc/apt/sources.list.d/sury-php.list
     fi
 
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    apt_get update
+    apt_get install -y --no-install-recommends \
         "php${PHP_VERSION}-bcmath" \
         "php${PHP_VERSION}-cli" \
         "php${PHP_VERSION}-common" \
@@ -262,8 +293,9 @@ install_php() {
 install_node() {
     say "installing Node.js ${NODE_MAJOR}"
 
+    wait_for_apt_lock
     curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
-    apt-get install -y --no-install-recommends nodejs
+    apt_get install -y --no-install-recommends nodejs
 
     require_command node
     require_command npm
@@ -285,6 +317,8 @@ install_docker() {
 
     say "installing Docker Engine"
 
+    wait_for_apt_lock
+
     local arch
     arch="$(dpkg --print-architecture)"
 
@@ -296,8 +330,8 @@ install_docker() {
     printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
         "$arch" "$OS_ID" "$OS_CODENAME" >/etc/apt/sources.list.d/docker.list
 
-    apt-get update
-    apt-get install -y --no-install-recommends \
+    apt_get update
+    apt_get install -y --no-install-recommends \
         containerd.io \
         docker-buildx-plugin \
         docker-ce \
