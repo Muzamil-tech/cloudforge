@@ -282,7 +282,10 @@ Requires `commands:write`. Queues one allowlisted operation.
 ```
 
 `operation` must be one of `server.inspect`, `server.health`, `metrics.collect`
-or `agent.restart`. The optional `payload.reason` is limited to 255 characters.
+or `agent.restart`. Resource operations (`resource.*`) are issued only by the
+resource domain, which enforces project ownership and roles; they are rejected
+by this generic command endpoint. The optional `payload.reason` is limited to 255
+characters.
 `idempotency_key` may also be sent as the `Idempotency-Key` header. Reusing a key
 in the same organization returns the existing command instead of creating a
 duplicate.

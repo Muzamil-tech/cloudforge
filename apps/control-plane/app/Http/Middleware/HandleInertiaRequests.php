@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
                 'enrollment_expires_at' => fn () => $request->session()->get('enrollment_expires_at'),
                 'plaintext_token' => fn () => $request->session()->get('plaintext_token'),
                 'invitation_url' => fn () => $request->session()->get('invitation_url'),
+                'resource_credentials' => fn () => $request->session()->get('resource_credentials'),
             ],
             'features' => [
                 'registrationEnabled' => (bool) config('cloudforge.registration.enabled'),

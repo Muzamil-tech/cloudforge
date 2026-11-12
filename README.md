@@ -20,6 +20,15 @@ locally. The control plane, organization/RBAC foundation, agent identity,
 enrollment, certificate rotation, heartbeats, inventory, metrics, durable
 commands and audit log are in place.
 
+The first database-resource slice is now in place: managed PostgreSQL and Redis
+containers are provisioned through the agent, with one-time credentials,
+start/stop/delete and live state. MySQL and application deployment remain later
+milestones.
+
+Managed resources pull `postgres:16-alpine` and `redis:7-alpine` from Docker Hub.
+The VPS must be able to reach the Docker registry, or a registry mirror must be
+configured on the Docker daemon.
+
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
 See [`docs/implementation/PROGRESS.md`](docs/implementation/PROGRESS.md) for the
@@ -65,8 +74,9 @@ curl -fsSL https://raw.githubusercontent.com/Muzamil-tech/cloudforge/main/instal
 ```
 
 The Phase 1 dashboard provides accounts, organizations, projects, environments,
-servers, members, API tokens and audit history. Application deployment and
-database provisioning are later milestones and are not presented as available.
+servers, members, API tokens and audit history. It also provisions managed
+PostgreSQL and Redis resources through the agent. Application deployment, MySQL
+and multi-server placement are later milestones.
 
 ## Local development
 

@@ -9,9 +9,11 @@ use App\Domains\Infrastructure\Services\HostInspector;
 use App\Domains\Operations\Models\AgentCommand;
 use App\Domains\Organizations\Models\Organization;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Resources\Models\Resource;
 use App\Policies\AgentCommandPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\ProjectPolicy;
+use App\Policies\ResourcePolicy;
 use App\Policies\ServerPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -39,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(Server::class, ServerPolicy::class);
         Gate::policy(Project::class, ProjectPolicy::class);
+        Gate::policy(Resource::class, ResourcePolicy::class);
         Gate::policy(Organization::class, OrganizationPolicy::class);
         Gate::policy(AgentCommand::class, AgentCommandPolicy::class);
 

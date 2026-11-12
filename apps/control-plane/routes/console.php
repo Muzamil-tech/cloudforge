@@ -6,6 +6,10 @@ Schedule::command('servers:mark-unreachable')
     ->everyMinute()
     ->withoutOverlapping();
 
+Schedule::command('resources:reconcile')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 Schedule::command('metrics:prune')
     ->dailyAt('03:15')
     ->withoutOverlapping();

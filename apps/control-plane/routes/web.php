@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\AuditLogController;
 use App\Http\Controllers\Web\MemberController;
 use App\Http\Controllers\Web\OrganizationController;
 use App\Http\Controllers\Web\ProjectController;
+use App\Http\Controllers\Web\ResourceController;
 use App\Http\Controllers\Web\ServerController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,13 @@ Route::middleware('auth')->group(function (): void {
         Route::resource('projects', ProjectController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::post('projects/{project}/environments', [ProjectController::class, 'storeEnvironment'])->name('projects.environments.store');
         Route::delete('projects/{project}/environments/{environment}', [ProjectController::class, 'destroyEnvironment'])->name('projects.environments.destroy');
+
+        Route::post('projects/{project}/resources', [ResourceController::class, 'store'])->name('resources.store');
+        Route::post('projects/{project}/resources/{resource}/start', [ResourceController::class, 'start'])->name('resources.start');
+        Route::post('projects/{project}/resources/{resource}/stop', [ResourceController::class, 'stop'])->name('resources.stop');
+        Route::post('projects/{project}/resources/{resource}/refresh', [ResourceController::class, 'refresh'])->name('resources.refresh');
+        Route::post('projects/{project}/resources/{resource}/reveal', [ResourceController::class, 'reveal'])->name('resources.reveal');
+        Route::delete('projects/{project}/resources/{resource}', [ResourceController::class, 'destroy'])->name('resources.destroy');
 
         Route::get('members', [MemberController::class, 'index'])->name('members.index');
         Route::post('members/invitations', [MemberController::class, 'invite'])->name('members.invitations.store');

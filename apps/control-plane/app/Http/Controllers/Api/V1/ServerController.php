@@ -197,7 +197,7 @@ class ServerController extends Controller
         AgentCommandService $commands,
     ): JsonResponse {
         $validated = $request->validate([
-            'operation' => ['required', 'string', Rule::in(AgentOperation::values())],
+            'operation' => ['required', 'string', Rule::in(AgentOperation::serverValues())],
             'payload' => ['nullable', 'array'],
             'idempotency_key' => ['nullable', 'string', 'max:120'],
         ]);

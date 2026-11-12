@@ -31,7 +31,7 @@ codebase.
                                 │ Go agent           │
                                 │ systemd service    │
                                 └─────────┬──────────┘
-                                          │ read-only Unix socket
+                                          │ local Unix socket
                                           ▼
                                 ┌────────────────────┐
                                 │ Docker Engine      │
@@ -81,6 +81,7 @@ UUID primary keys so identifiers do not leak ordering or volume.
 | `server_certificates` | Issued agent certificates and revocation state |
 | `server_enrollments` | Hashed, single-use, short-lived enrollment tokens and their purpose |
 | `server_metrics` | Host metric samples with retention pruning |
+| `resources` | Managed PostgreSQL/Redis containers, encrypted credentials and lifecycle state |
 | `agent_commands` | Durable command queue and command outcomes |
 | `audit_logs` | Organization-scoped security and lifecycle history |
 
@@ -117,7 +118,7 @@ internal/enrollment      one-time token redemption and identity persistence
 internal/client          signed HTTPS transport
 internal/agent           heartbeat, inventory, metrics, command and rotation loops
 internal/commands        allowlisted executor and durable deduplication store
-internal/docker          read-only Docker Engine inspection over a Unix socket
+internal/docker          Docker inspection and allowlisted managed database containers
 internal/metrics         Linux host sampling
 internal/protocol        JSON wire types shared by every request
 ```
@@ -237,7 +238,7 @@ result instead of executing the operation again. If a previous run stopped while
 a command was marked `executing`, the agent reports it as failed rather than
 repeating an operation whose side effects are unknown.
 
-Phase 1 allows four operations:
+Phase 1 allows four server operations:
 
 | Operation | Effect | Role |
 | --- | --- | --- |
@@ -246,7 +247,40 @@ Phase 1 allows four operations:
 | `metrics.collect` | Read one metric sample | Operator or developer |
 | `agent.restart` | Report the result, then exit for systemd to restart | Operator or above |
 
-There is no generic shell operation and no Docker mutation endpoint.
+The resource layer adds five typed operations: `resource.create`,
+`resource.start`, `resource.stop`, `resource.delete` and `resource.inspect`.
+They only manage allowlisted PostgreSQL and Redis containers with
+control-plane-generated names, volumes, labels and connection settings. The
+agent builds the Docker request itself; no image name, command, mount or port is
+accepted from a browser or generic API caller.
+
+There is no generic shell operation and no arbitrary Docker API endpoint.
+
+### Managed resources
+
+The first resource slice supports PostgreSQL 16 and Redis 7 on a selected
+organization server:
+
+1. A project member with deploy permission submits a resource for an
+   environment and a ready server.
+2. The control plane creates a `resources` row with status `provisioning` and
+   issues a typed `resource.create` command. The payload contains only the
+   resource UUID, type and generated container/volume names.
+3. The agent pulls the allowlisted image, creates a persistent named volume and
+   starts a container bound to `127.0.0.1` on a Docker-assigned port.
+4. The agent returns the generated credentials once. The control plane encrypts
+   them in the resource row, marks the resource active and removes the password
+   from the generic agent command result.
+5. A developer can reveal the credentials once from the project page. Start,
+   stop, delete and refresh are separate typed commands.
+6. `resources:reconcile` runs every minute and fails a resource whose command
+   expired or completed without a usable result.
+
+Resource deletion removes the container and its named volume. Project,
+environment and server deletion are blocked while non-deleted resources still
+reference them.
+
+
 
 ## Trust boundaries
 
@@ -256,7 +290,7 @@ There is no generic shell operation and no Docker mutation endpoint.
 | API client → control plane | Hashed Bearer token with explicit abilities |
 | Agent → control plane | Client certificate plus per-request RSA signature, replay protection, revocation |
 | Control plane → agent | No inbound connection; commands are pulled by the agent |
-| Agent → Docker | Local Unix socket, read-only inspection calls only |
+| Agent → Docker | Local Unix socket, inspection plus allowlisted managed database containers |
 | Operator → host | SSH and the operating system, outside CloudForge |
 
 Tenant isolation is enforced at the query level: every web and API lookup is
@@ -282,8 +316,10 @@ The full procedure is in [control-plane deployment](../deployment/control-plane.
 
 ## Explicit Phase 1 limits
 
-- No deployment, build, database, routing or scaling engines.
-- No arbitrary command execution and no Docker write operations.
+- No application deployment, build, MySQL, routing or scaling engines.
+- Managed PostgreSQL and Redis resources are available; MySQL resources are not.
+- No arbitrary command execution and no arbitrary Docker write operations. The
+  resource commands only manage allowlisted database containers.
 - Commands are pulled; there is no server-initiated connection to an agent.
 - Certificate revocation is enforced on every request, but there is no CRL or
   OCSP responder because the control plane is the only verifier.

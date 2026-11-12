@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Agent;
 use App\Domains\Infrastructure\Actions\RotateServerCertificate;
 use App\Domains\Operations\Models\AgentCommand;
 use App\Domains\Operations\Services\AgentCommandService;
+use App\Domains\Resources\Actions\HandleResourceCommandResult;
 use App\Http\Requests\Agent\CommandResultRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,15 +64,24 @@ class CommandController extends AgentController
         CommandResultRequest $request,
         string $command,
         AgentCommandService $commands,
+        HandleResourceCommandResult $resourceResults,
     ): JsonResponse {
         $server = $this->agentServer($request);
         $agentCommand = $this->findCommand($server->id, $command);
         $validated = $request->validated();
+        $succeeded = $validated['status'] === 'completed';
 
         $agentCommand = $commands->complete(
             $agentCommand,
             $server,
-            $validated['status'] === 'completed',
+            $succeeded,
+            $validated['result'] ?? [],
+            $validated['error_message'] ?? null,
+        );
+
+        $resourceResults->handle(
+            $agentCommand,
+            $succeeded,
             $validated['result'] ?? [],
             $validated['error_message'] ?? null,
         );

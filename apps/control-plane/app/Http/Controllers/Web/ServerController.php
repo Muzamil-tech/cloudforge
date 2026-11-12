@@ -224,6 +224,7 @@ class ServerController extends Controller
             ],
             'hasActiveCertificate' => $server->activeCertificate() !== null,
             'operations' => collect(AgentOperation::cases())
+                ->reject(fn (AgentOperation $operation): bool => $operation->isResourceOperation())
                 ->map(fn (AgentOperation $operation): array => [
                     'value' => $operation->value,
                     'label' => $operation->label(),
@@ -259,6 +260,10 @@ class ServerController extends Controller
     ): RedirectResponse {
         $organization = $organizationContext->require($request);
         Gate::authorize('delete', $server);
+
+        if ($server->resources()->exists()) {
+            return back()->with('error', 'Delete the resources hosted on this server before removing it.');
+        }
 
         $auditLogger->record(AuditAction::ServerDeleted, $organization, $server, ['name' => $server->name], $request->user());
 
@@ -345,7 +350,7 @@ class ServerController extends Controller
         $organizationContext->require($request);
 
         $validated = $request->validate([
-            'operation' => ['required', 'string', Rule::in(AgentOperation::values())],
+            'operation' => ['required', 'string', Rule::in(AgentOperation::serverValues())],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 

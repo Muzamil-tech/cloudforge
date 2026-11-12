@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Operations\Enums\AuditAction;
 use App\Domains\Operations\Services\AuditLogger;
 use App\Domains\Projects\Actions\CreateProject;
 use App\Domains\Projects\Enums\EnvironmentType;
 use App\Domains\Projects\Models\Environment;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Resources\Enums\ResourceType;
+use App\Domains\Resources\Models\Resource;
 use App\Http\Controllers\Controller;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -57,13 +60,39 @@ class ProjectController extends Controller
 
     public function show(Request $request, Project $project, OrganizationContext $organizationContext): Response
     {
-        $organizationContext->require($request);
+        $organization = $organizationContext->require($request);
         Gate::authorize('view', $project);
 
-        $project->load('environments');
+        $project->load(['environments', 'resources.environment', 'resources.server']);
+
+        $servers = $organization->servers()
+            ->whereIn('status', [ServerStatus::Active, ServerStatus::Ready])
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($server): array => [
+                'id' => $server->id,
+                'name' => $server->name,
+                'status' => $server->status->value,
+                'status_label' => $server->status->label(),
+                'docker_version' => $server->docker_version,
+            ])
+            ->all();
 
         return Inertia::render('Projects/Show', [
             'project' => $this->projectPayload($project),
+            'resources' => $project->resources
+                ->map(fn (Resource $resource): array => $this->resourcePayload($resource))
+                ->values()
+                ->all(),
+            'servers' => $servers,
+            'resourceTypes' => collect(ResourceType::cases())
+                ->map(fn (ResourceType $type): array => [
+                    'value' => $type->value,
+                    'label' => $type->label(),
+                    'image' => $type->image(),
+                    'port' => $type->port(),
+                ])
+                ->all(),
             'environmentTypes' => collect(EnvironmentType::cases())
                 ->map(fn (EnvironmentType $type): array => [
                     'value' => $type->value,
@@ -72,6 +101,7 @@ class ProjectController extends Controller
                 ->all(),
             'canManage' => Gate::allows('update', $project),
             'canDelete' => Gate::allows('delete', $project),
+            'canCreateResource' => Gate::allows('create', [Resource::class, $project]),
         ]);
     }
 
@@ -110,6 +140,10 @@ class ProjectController extends Controller
     ): RedirectResponse {
         $organizationContext->require($request);
         Gate::authorize('delete', $project);
+
+        if ($project->resources()->exists()) {
+            return back()->with('error', 'Delete the project resources before deleting the project.');
+        }
 
         $auditLogger->record(
             AuditAction::ProjectDeleted,
@@ -171,6 +205,10 @@ class ProjectController extends Controller
 
         abort_unless($environment->project_id === $project->id, 404);
 
+        if ($environment->resources()->exists()) {
+            return back()->with('error', 'Delete the environment resources before removing the environment.');
+        }
+
         $name = $environment->name;
         $environment->delete();
 
@@ -183,6 +221,45 @@ class ProjectController extends Controller
         );
 
         return back()->with('success', "{$name} was removed.");
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resourcePayload(Resource $resource): array
+    {
+        return [
+            'id' => $resource->id,
+            'name' => $resource->name,
+            'type' => $resource->type->value,
+            'type_label' => $resource->type->label(),
+            'image' => $resource->image,
+            'status' => $resource->status->value,
+            'status_label' => $resource->status->label(),
+            'status_tone' => $resource->status->tone(),
+            'environment' => [
+                'id' => $resource->environment->id,
+                'name' => $resource->environment->name,
+                'type' => $resource->environment->type->value,
+                'type_label' => $resource->environment->type->label(),
+            ],
+            'server' => [
+                'id' => $resource->server->id,
+                'name' => $resource->server->name,
+            ],
+            'host' => $resource->host,
+            'port' => $resource->port,
+            'database_name' => $resource->database_name,
+            'username' => $resource->username,
+            'credentials_revealed' => $resource->isRevealed(),
+            'can_reveal' => $resource->canRevealCredentials() && Gate::allows('reveal', $resource),
+            'can_start' => $resource->status->canStart() && Gate::allows('start', $resource),
+            'can_stop' => $resource->status->canStop() && Gate::allows('stop', $resource),
+            'can_delete' => $resource->status->canDelete() && Gate::allows('delete', $resource),
+            'can_refresh' => ! $resource->status->isTransitional() && Gate::allows('refresh', $resource),
+            'last_error' => $resource->last_error,
+            'created_at' => $resource->created_at?->toIso8601String(),
+        ];
     }
 
     /**

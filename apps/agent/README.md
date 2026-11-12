@@ -9,7 +9,8 @@ Phase 1 is deliberately narrow:
 - Outbound HTTPS only. The agent never listens on a network port.
 - RSA-2048 key and a client certificate issued by the control plane certificate
   authority.
-- Read-only Docker inspection over a local Unix socket.
+- Read-only Docker inspection plus typed lifecycle operations for allowlisted
+  PostgreSQL and Redis containers.
 - No arbitrary shell execution. The Go implementation links no shell and the
   command executor switches on a fixed enumeration.
 - The enrollment token is single-use and is never persisted to `agent.env`.
@@ -179,11 +180,22 @@ and enable `CLOUDFORGE_REQUIRE_CLIENT_CERT_HEADER` on the control plane.
 
 The agent only accepts an absolute Unix socket path. Endpoints containing `://`
 (such as `tcp://`, `ssh://` or `npipe://`) are rejected at configuration load.
-It calls only `GET /version` and `GET /info`. Those responses supply the daemon
-version, API version, storage driver, rootless flag and Swarm state used for
-capability reporting. The agent does not enumerate containers, images, networks
-or volumes in Phase 1, and it never creates, starts, stops or removes Docker
-resources.
+It calls `GET /version` and `GET /info` for capability reporting, and performs a
+small, typed set of resource operations:
+
+- pull `postgres:16-alpine` or `redis:7-alpine`;
+- create a container with a control-plane-generated name and persistent volume;
+- bind one port to `127.0.0.1` only;
+- start, stop, inspect and remove that container and its volume.
+
+The agent builds the Docker request itself. It never accepts an image name,
+command, mount, port mapping or arbitrary Docker API path from the control
+plane. There is no container enumeration and no generic Docker proxy.
+
+Managed containers carry `cloudforge.managed`, `cloudforge.resource_id` and
+`cloudforge.resource_type` labels. The generated database password is returned
+to the control plane once; the control plane encrypts it and removes it from the
+generic command result.
 
 ## Certificate rotation
 

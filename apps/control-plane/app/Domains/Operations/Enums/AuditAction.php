@@ -34,6 +34,13 @@ enum AuditAction: string
     case ServerCertificateRotated = 'server.certificate_rotated';
     case ServerUnreachable = 'server.unreachable';
     case ServerRecovered = 'server.recovered';
+    case ResourceProvisioned = 'resource.provisioned';
+    case ResourceCreated = 'resource.created';
+    case ResourceStarted = 'resource.started';
+    case ResourceStopped = 'resource.stopped';
+    case ResourceDeleted = 'resource.deleted';
+    case ResourceFailed = 'resource.failed';
+    case ResourceCredentialsRevealed = 'resource.credentials_revealed';
     case AgentCommandIssued = 'agent_command.issued';
     case AgentCommandAcknowledged = 'agent_command.acknowledged';
     case AgentCommandCompleted = 'agent_command.completed';

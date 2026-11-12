@@ -74,6 +74,10 @@ The installer is idempotent. Re-running it updates the checkout, dependencies,
 migrations, Nginx configuration and agent while preserving `.env` secrets and the
 database role.
 
+Managed PostgreSQL and Redis resources are pulled from Docker Hub. The VPS needs
+outbound access to the registry, or a registry mirror configured on the Docker
+daemon.
+
 ### Using a private fork
 
 The public repository needs no credentials. If you deploy from a private fork,

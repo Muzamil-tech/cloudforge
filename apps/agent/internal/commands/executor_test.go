@@ -12,6 +12,7 @@ import (
 
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/metrics"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/protocol"
+	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/resources"
 )
 
 type reportedResult struct {
@@ -58,6 +59,53 @@ func (f *fakeDocker) Inspect(context.Context) (protocol.DockerSummary, []protoco
 	return f.summary, f.capabilities
 }
 
+type fakeResources struct {
+	createSpec resources.CreateSpec
+	endpoint   resources.Endpoint
+	state      resources.State
+	err        error
+	calls      []string
+}
+
+func (f *fakeResources) Create(_ context.Context, spec resources.CreateSpec) (resources.Endpoint, error) {
+	f.calls = append(f.calls, "create")
+	f.createSpec = spec
+
+	if f.err != nil {
+		return resources.Endpoint{}, f.err
+	}
+
+	return f.endpoint, nil
+}
+
+func (f *fakeResources) Start(_ context.Context, containerRef string) error {
+	f.calls = append(f.calls, "start:"+containerRef)
+
+	return f.err
+}
+
+func (f *fakeResources) Stop(_ context.Context, containerRef string) error {
+	f.calls = append(f.calls, "stop:"+containerRef)
+
+	return f.err
+}
+
+func (f *fakeResources) Delete(_ context.Context, containerRef string, volumeName string) error {
+	f.calls = append(f.calls, "delete:"+containerRef+":"+volumeName)
+
+	return f.err
+}
+
+func (f *fakeResources) InspectResource(_ context.Context, containerRef string) (resources.State, error) {
+	f.calls = append(f.calls, "inspect:"+containerRef)
+
+	if f.err != nil {
+		return resources.State{}, f.err
+	}
+
+	return f.state, nil
+}
+
 type fakeCollector struct {
 	host    metrics.HostInfo
 	sample  metrics.Sample
@@ -97,12 +145,18 @@ var testNow = time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
 func testExecutor(t *testing.T, runner *fakeRunner, docker *fakeDocker, collector *fakeCollector) (*Executor, *Store) {
 	t.Helper()
 
+	return testExecutorWithResources(t, runner, docker, &fakeResources{}, collector)
+}
+
+func testExecutorWithResources(t *testing.T, runner *fakeRunner, docker *fakeDocker, resourceManager *fakeResources, collector *fakeCollector) (*Executor, *Store) {
+	t.Helper()
+
 	store, err := OpenStore(filepath.Join(t.TempDir(), "commands.json"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 
-	executor := NewExecutor(runner, docker, collector, store, "1.0.0", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	executor := NewExecutor(runner, docker, resourceManager, collector, store, "1.0.0", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	executor.now = func() time.Time {
 		return testNow
 	}
@@ -422,5 +476,128 @@ func TestExecutingCommandReportsFailedStatusForUnexpectedPanics(t *testing.T) {
 
 	if runner.results[0].Result.ErrorMessage == "" {
 		t.Fatal("a failed result must carry an error message")
+	}
+}
+
+func TestExecutorProvisionsAResource(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{
+		endpoint: resources.Endpoint{
+			ContainerID: "container-123",
+			Host:        "127.0.0.1",
+			Port:        32768,
+			Username:    "cloudforge",
+			Database:    "cloudforge",
+			Password:    "generated-secret",
+			Status:      "running",
+		},
+	}
+	executor, store := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	cmd := command("cmd-create", OperationResourceCreate, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+		"resource_type":  "postgresql",
+		"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		"volume_name":    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(resourceManager.calls) != 1 || resourceManager.calls[0] != "create" {
+		t.Fatalf("unexpected resource calls %#v", resourceManager.calls)
+	}
+
+	if resourceManager.createSpec.Kind != resources.Postgres {
+		t.Fatalf("unexpected resource kind %#v", resourceManager.createSpec)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeCompleted {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	result := runner.results[0].Result.Result
+	if result["port"] != 32768 || result["password"] != "generated-secret" || result["container_id"] != "container-123" {
+		t.Fatalf("unexpected resource result %#v", result)
+	}
+
+	stored, ok := store.Get("cmd-create")
+	if !ok {
+		t.Fatal("expected the resource outcome to be stored")
+	}
+
+	if _, ok := stored.Result["password"]; ok {
+		t.Fatal("the durable agent store must not retain the generated password")
+	}
+}
+
+func TestExecutorStartsStopsAndDeletesAResource(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{}
+	executor, _ := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	for _, operation := range []string{OperationResourceStart, OperationResourceStop} {
+		cmd := command("cmd-"+operation, operation, testNow.Add(time.Minute))
+		cmd.Payload = map[string]any{
+			"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+			"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		}
+
+		if err := executor.Handle(context.Background(), cmd); err != nil {
+			t.Fatalf("%s: %v", operation, err)
+		}
+	}
+
+	deleteCommand := command("cmd-delete", OperationResourceDelete, testNow.Add(time.Minute))
+	deleteCommand.Payload = map[string]any{
+		"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+		"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		"volume_name":    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	}
+
+	if err := executor.Handle(context.Background(), deleteCommand); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if len(resourceManager.calls) != 3 {
+		t.Fatalf("unexpected resource calls %#v", resourceManager.calls)
+	}
+
+	if resourceManager.calls[2] != "delete:cloudforge-01a1d058-8612-7209-9082-03adf0d11976:cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data" {
+		t.Fatalf("unexpected delete call %q", resourceManager.calls[2])
+	}
+}
+
+func TestExecutorReportsResourceManagerFailures(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	resourceManager := &fakeResources{err: errors.New("Docker is unavailable")}
+	executor, _ := testExecutorWithResources(t, runner, &fakeDocker{}, resourceManager, &fakeCollector{})
+
+	cmd := command("cmd-create-failure", OperationResourceCreate, testNow.Add(time.Minute))
+	cmd.Payload = map[string]any{
+		"resource_id":    "01a1d058-8612-7209-9082-03adf0d11976",
+		"resource_type":  "redis",
+		"container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		"volume_name":    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	}
+
+	if err := executor.Handle(context.Background(), cmd); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(runner.results) != 1 || runner.results[0].Result.Status != OutcomeFailed {
+		t.Fatalf("unexpected results %#v", runner.results)
+	}
+
+	if !strings.Contains(runner.results[0].Result.ErrorMessage, "Docker is unavailable") {
+		t.Fatalf("unexpected error %q", runner.results[0].Result.ErrorMessage)
 	}
 }

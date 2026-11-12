@@ -9,15 +9,21 @@ import (
 
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/metrics"
 	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/protocol"
+	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/resources"
 )
 
-// Phase 1 operations. Anything else is reported as unsupported and is never
-// executed.
+// Operations executed by the agent. Anything else is reported as unsupported
+// and is never executed.
 const (
-	OperationServerInspect = "server.inspect"
-	OperationServerHealth  = "server.health"
-	OperationMetrics       = "metrics.collect"
-	OperationAgentRestart  = "agent.restart"
+	OperationServerInspect   = "server.inspect"
+	OperationServerHealth    = "server.health"
+	OperationMetrics         = "metrics.collect"
+	OperationAgentRestart    = "agent.restart"
+	OperationResourceCreate  = "resource.create"
+	OperationResourceStart   = "resource.start"
+	OperationResourceStop    = "resource.stop"
+	OperationResourceDelete  = "resource.delete"
+	OperationResourceInspect = "resource.inspect"
 )
 
 const (
@@ -49,6 +55,7 @@ type MetricsCollector interface {
 type Executor struct {
 	runner       Runner
 	docker       DockerInspector
+	resources    resources.Manager
 	metrics      MetricsCollector
 	store        *Store
 	agentVersion string
@@ -61,6 +68,7 @@ type Executor struct {
 func NewExecutor(
 	runner Runner,
 	docker DockerInspector,
+	resourceManager resources.Manager,
 	collector MetricsCollector,
 	store *Store,
 	agentVersion string,
@@ -74,6 +82,7 @@ func NewExecutor(
 	return &Executor{
 		runner:       runner,
 		docker:       docker,
+		resources:    resourceManager,
 		metrics:      collector,
 		store:        store,
 		agentVersion: agentVersion,
@@ -147,7 +156,9 @@ func (e *Executor) Handle(ctx context.Context, command protocol.Command) error {
 	outcome.DurationMS = e.now().Sub(started).Milliseconds()
 	outcome.CompletedAt = e.now().UTC()
 
-	if err := e.store.Put(outcome); err != nil {
+	stored := redactOutcomeForStore(outcome)
+
+	if err := e.store.Put(stored); err != nil {
 		e.log.Error("persist command outcome",
 			"command_id", command.ID,
 			"error", err,
@@ -168,6 +179,13 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) Outcom
 		CommandID: command.ID,
 		Operation: command.Operation,
 		Status:    OutcomeCompleted,
+	}
+
+	if e.resources == nil && strings.HasPrefix(command.Operation, "resource.") {
+		outcome.Status = OutcomeFailed
+		outcome.ErrorMessage = "resource operations are not configured on this agent"
+
+		return outcome
 	}
 
 	switch command.Operation {
@@ -196,6 +214,87 @@ func (e *Executor) execute(ctx context.Context, command protocol.Command) Outcom
 		}
 
 		outcome.Result = result
+
+	case OperationResourceCreate:
+		endpoint, err := e.resources.Create(ctx, resources.CreateSpec{
+			ID:            payloadString(command.Payload, "resource_id"),
+			Kind:          resources.Kind(payloadString(command.Payload, "resource_type")),
+			ContainerName: payloadString(command.Payload, "container_name"),
+			VolumeName:    payloadString(command.Payload, "volume_name"),
+		})
+		if err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("provision resource: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{
+			"resource_id":  payloadString(command.Payload, "resource_id"),
+			"status":       endpoint.Status,
+			"container_id": endpoint.ContainerID,
+			"host":         endpoint.Host,
+			"port":         endpoint.Port,
+			"username":     endpoint.Username,
+			"database":     endpoint.Database,
+			"password":     endpoint.Password,
+		}
+
+	case OperationResourceStart:
+		resourceID := payloadString(command.Payload, "resource_id")
+		containerName := payloadString(command.Payload, "container_name")
+
+		if err := e.resources.Start(ctx, containerName); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("start resource: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"resource_id": resourceID, "status": "running"}
+
+	case OperationResourceStop:
+		resourceID := payloadString(command.Payload, "resource_id")
+		containerName := payloadString(command.Payload, "container_name")
+
+		if err := e.resources.Stop(ctx, containerName); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("stop resource: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"resource_id": resourceID, "status": "stopped"}
+
+	case OperationResourceDelete:
+		resourceID := payloadString(command.Payload, "resource_id")
+		containerName := payloadString(command.Payload, "container_name")
+
+		if err := e.resources.Delete(ctx, containerName, payloadString(command.Payload, "volume_name")); err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("delete resource: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{"resource_id": resourceID, "status": "deleted"}
+
+	case OperationResourceInspect:
+		resourceID := payloadString(command.Payload, "resource_id")
+		state, err := e.resources.InspectResource(ctx, payloadString(command.Payload, "container_name"))
+		if err != nil {
+			outcome.Status = OutcomeFailed
+			outcome.ErrorMessage = truncate(fmt.Sprintf("inspect resource: %s", err))
+
+			break
+		}
+
+		outcome.Result = map[string]any{
+			"resource_id":  resourceID,
+			"status":       state.Status,
+			"port":         state.Port,
+			"container_id": state.ContainerID,
+		}
 
 	default:
 		outcome.Status = OutcomeFailed
@@ -323,11 +422,44 @@ func (e *Executor) triggerRestart(outcome Outcome) {
 
 func supported(operation string) bool {
 	switch operation {
-	case OperationServerInspect, OperationServerHealth, OperationMetrics, OperationAgentRestart:
+	case OperationServerInspect,
+		OperationServerHealth,
+		OperationMetrics,
+		OperationAgentRestart,
+		OperationResourceCreate,
+		OperationResourceStart,
+		OperationResourceStop,
+		OperationResourceDelete,
+		OperationResourceInspect:
 		return true
 	default:
 		return false
 	}
+}
+
+func payloadString(payload map[string]any, key string) string {
+	value, _ := payload[key].(string)
+
+	return strings.TrimSpace(value)
+}
+
+func redactOutcomeForStore(outcome Outcome) Outcome {
+	if outcome.Operation != OperationResourceCreate || outcome.Result == nil {
+		return outcome
+	}
+
+	redacted := make(map[string]any, len(outcome.Result))
+	for key, value := range outcome.Result {
+		if key == "password" {
+			continue
+		}
+
+		redacted[key] = value
+	}
+
+	outcome.Result = redacted
+
+	return outcome
 }
 
 func truncate(value string) string {

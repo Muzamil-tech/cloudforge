@@ -87,28 +87,34 @@ or token from the dashboard.
 | 21 | Three VPS nodes registered | Requires real VPS hosts | None | **Not verified.** No VPS available. |
 | 22 | Real Docker inventory | Agent talks to a real Docker daemon | Fake Docker server tests only | **Not verified.** No Docker available. |
 | 23 | One-command clean-VPS installation | Root `install.sh` provisions PHP, PostgreSQL, Redis, Nginx, Node, Docker, Composer, TLS, the dashboard, scheduler, queue worker and the source-built agent | `InstallerScriptTest`; `one_command_installer_test.sh`; `installer_test.sh` | Tested locally. No clean VPS run. |
+| 24 | PostgreSQL and Redis resource provisioning | `resources` domain, typed `resource.*` agent commands, Docker image pull and container lifecycle | `ResourceProvisioningTest`; Go Docker and executor tests | Tested locally against a fake Docker API. No real Docker run. |
+| 25 | One-time database credentials | Encrypted resource password, one-time reveal, command-result redaction | `ResourceProvisioningTest` credential and agent-result tests | Tested locally. |
+| 26 | Resource lifecycle and recovery | Start, stop, delete, inspect, scheduled reconciliation | `ResourceProvisioningTest`; `ReconcileResources` | Tested locally. |
+| 27 | MySQL, application attachment and backups | Not implemented | None | **Not started.** |
 
 ### Command evidence
 
 | Command | Result |
 | --- | --- |
 | `vendor/bin/pint --format agent` | Formatted four files; the rerun reports `passed`. |
-| `php artisan test --compact` | Final full run: 179 tests passed, 1,341 assertions, 221.2 seconds. |
+| `php artisan test --compact` | Final full run: 190 tests passed, 1,415 assertions, 229.4 seconds. |
 | `php artisan test --compact tests/Feature/InstallerScriptTest.php tests/Feature/BootstrapCommandTest.php` | 12 tests passed, 57 assertions after the final shell edits. |
 | `bash -n install.sh` | Parsed without error. |
 | `bash tests/shell/one_command_installer_test.sh install.sh` | 20 assertions, 0 failures. |
 | `sh tests/shell/installer_test.sh` | 35 assertions, 0 failures, 2 skipped mode/execute-bit checks on Windows. |
+| `php artisan test --compact tests/Feature/ResourceProvisioningTest.php tests/Feature/AgentCommandTest.php` | 28 tests passed, 213 assertions. |
+| `go test ./internal/docker ./internal/commands` | Passed, including managed resource creation, deletion and executor payload tests. |
 | `go test ./...` | All packages passed; `internal/agent` 4.2s, `internal/client` 6.2s, `internal/enrollment` 6.7s. |
 | `go vet ./...` | No findings. |
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
-| `npm run build` | Vite 8.3.8 built 608 modules; JS 463.89 kB (gzip 134.43 kB), CSS 82.27 kB (gzip 16.02 kB). |
+| `npm run build` | Vite 8.3.8 built 608 modules; JS 470.74 kB (gzip 135.76 kB), CSS 81.72 kB (gzip 15.93 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
 | GitHub release `v1.0.0` | Three assets uploaded; the latest download URLs return HTTP 200. |
 | `go test`/`go vet` after machine-id override | Passed. The new override and invalid-value tests are in `internal/enrollment/enrollment_test.go`. |
 
-The final full PHP suite, after the one-command installer and status-path
-changes, passed with the counts above. The targeted installer and command tests
-also pass after the last shell-only edits.
+The final full PHP suite, after the one-command installer, resource layer and
+status-path changes, passed with the counts above. The targeted installer,
+resource and command tests also pass after the last shell and policy edits.
 
 ### Defects found and fixed during Milestone 1 verification
 
@@ -151,6 +157,10 @@ These are deliberate gaps, not hidden failures:
 - No real Docker daemon. The agent's Docker client is tested against a fake
   server over a Unix socket; real `/version` and `/info` responses, permissions
   and rootless detection are unverified.
+- The resource layer has never created a real container. Docker image pull,
+  loopback port binding, persistent volumes, credential use and deletion are
+  unverified on a VPS.
+- No MySQL resource, application attachment, backup or restore is implemented.
 - No real DNS or TLS. Enrollment over a public HTTPS endpoint, certificate
   chains, reverse-proxy client-certificate forwarding and rate limiting behind a
   proxy are unverified.

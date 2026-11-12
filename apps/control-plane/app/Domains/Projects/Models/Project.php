@@ -3,6 +3,7 @@
 namespace App\Domains\Projects\Models;
 
 use App\Domains\Organizations\Models\Organization;
+use App\Domains\Resources\Models\Resource;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -34,5 +35,13 @@ class Project extends Model
     public function environments(): HasMany
     {
         return $this->hasMany(Environment::class);
+    }
+
+    /**
+     * @return HasMany<resource, $this>
+     */
+    public function resources(): HasMany
+    {
+        return $this->hasMany(Resource::class);
     }
 }

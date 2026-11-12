@@ -318,7 +318,8 @@ main() {
     remove_bootstrap_credential
 
     systemctl daemon-reload
-    systemctl enable --now "$SERVICE_NAME"
+    systemctl enable "$SERVICE_NAME"
+    systemctl restart "$SERVICE_NAME"
 
     say "agent installed and started; inspect it with: systemctl status $SERVICE_NAME"
     say "operator note: the enrollment token was not written to $CONFIG_DIR/agent.env"

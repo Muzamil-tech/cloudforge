@@ -409,6 +409,29 @@ class AgentCommandTest extends TestCase
         $this->assertSame(0, AgentCommand::query()->count());
     }
 
+    public function test_resource_operations_cannot_be_issued_through_the_generic_command_api(): void
+    {
+        [$server, $token] = $this->serverWithToken(['commands:write']);
+
+        $this->postJson(
+            route('api.servers.commands.store', $server->id),
+            [
+                'operation' => AgentOperation::ResourceCreate->value,
+                'payload' => [
+                    'resource_id' => '01a1d058-8612-7209-9082-03adf0d11976',
+                    'resource_type' => 'postgresql',
+                    'container_name' => 'cloudforge-01a1d058-8612-7209-9082-03adf0d11976',
+                    'volume_name' => 'cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data',
+                ],
+            ],
+            $this->bearer($token),
+        )
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('operation');
+
+        $this->assertSame(0, AgentCommand::query()->count());
+    }
+
     public function test_agent_restart_commands_use_a_short_expiry(): void
     {
         [$server] = $this->serverWithToken([]);

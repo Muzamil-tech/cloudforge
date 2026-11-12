@@ -83,7 +83,7 @@ func New(cfg config.Config, log *slog.Logger) (*Agent, error) {
 		restartCh: make(chan struct{}),
 	}
 
-	a.executor = commands.NewExecutor(api, dockerClient, collector, store, cfg.AgentVersion, a.requestRestart, log)
+	a.executor = commands.NewExecutor(api, dockerClient, dockerClient, collector, store, cfg.AgentVersion, a.requestRestart, log)
 
 	return a, nil
 }

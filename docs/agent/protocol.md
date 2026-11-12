@@ -274,7 +274,8 @@ Response:
 The Docker summary is intentionally limited to facts obtained from
 `GET /version` and `GET /info` over a Unix socket: daemon version, API version,
 storage driver, rootless status and Swarm state. The agent does not enumerate
-containers, images, networks or volumes in Phase 1.
+containers, images, networks or volumes for inventory. Managed resource
+operations are a separate typed path described below.
 
 ## Metrics
 
@@ -396,9 +397,34 @@ to another server returns `404`.
 | `server.health` | 300 seconds | Report agent and Docker health. |
 | `metrics.collect` | 300 seconds | Read one metric sample. |
 | `agent.restart` | 60 seconds | Report the result, then exit so systemd restarts the process. The result is best effort. |
+| `resource.create` | 900 seconds | Pull an allowlisted image, create a persistent volume and container, start it, and return connection details once. |
+| `resource.start` | 120 seconds | Start an existing managed container. |
+| `resource.stop` | 120 seconds | Stop an existing managed container. |
+| `resource.delete` | 180 seconds | Remove the managed container and its volume. |
+| `resource.inspect` | 60 seconds | Read the container state and published port. |
 
 All operations accept an optional `payload.reason` string of at most 255
-characters. There is no generic shell operation and no Docker mutation
+characters. Resource operations use a strict payload:
+
+```json
+{
+  "resource_id": "01a1d058-8612-7209-9082-03adf0d11976",
+  "resource_type": "postgresql",
+  "container_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+  "volume_name": "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data"
+}
+```
+
+`resource.start`, `resource.stop` and `resource.inspect` require only
+`resource_id` and `container_name`. `resource.delete` also requires
+`volume_name`. The agent rejects malformed IDs or names, unsupported resource
+types and any attempt to supply an image, command, mount or port mapping.
+
+The resource result for `resource.create` contains the container ID, loopback
+host, published port, username, database, status and a generated password. The
+control plane encrypts the password in the resource record and removes it from
+the generic command result. The agent's durable command store also omits the
+password. There is no generic shell operation and no arbitrary Docker API
 operation. An unknown operation is reported as failed and is never executed.
 
 ### Agent-side deduplication

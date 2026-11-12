@@ -5,6 +5,7 @@ namespace App\Domains\Infrastructure\Models;
 use App\Domains\Infrastructure\Enums\ServerStatus;
 use App\Domains\Operations\Models\AgentCommand;
 use App\Domains\Organizations\Models\Organization;
+use App\Domains\Resources\Models\Resource;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -80,6 +81,14 @@ class Server extends Model
     public function capabilities(): HasMany
     {
         return $this->hasMany(ServerCapability::class);
+    }
+
+    /**
+     * @return HasMany<resource, $this>
+     */
+    public function resources(): HasMany
+    {
+        return $this->hasMany(Resource::class);
     }
 
     /**

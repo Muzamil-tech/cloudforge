@@ -2,10 +2,14 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/Muzamil-tech/cloudforge/apps/agent/internal/resources"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -159,5 +163,160 @@ func TestInspectSurvivesInfoFailure(t *testing.T) {
 
 	if len(capabilities) != 1 || capabilities[0].Name != "docker.engine" {
 		t.Fatalf("expected only the engine capability, got %#v", capabilities)
+	}
+}
+
+func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
+	t.Parallel()
+
+	var calls []string
+	var createBody map[string]any
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls = append(calls, request.Method+" "+request.URL.Path)
+
+			switch {
+			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
+				return jsonResponse(t, http.StatusOK, `{"status":"Image is up to date"}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
+				if err := json.NewDecoder(request.Body).Decode(&createBody); err != nil {
+					t.Fatalf("decode create body: %v", err)
+				}
+
+				return jsonResponse(t, http.StatusCreated, `{"Id":"container-123"}`), nil
+			case request.Method == http.MethodPost && request.URL.Path == "/containers/container-123/start":
+				return jsonResponse(t, http.StatusNoContent, ""), nil
+			case request.Method == http.MethodGet && request.URL.Path == "/containers/container-123/json":
+				return jsonResponse(t, http.StatusOK, `{
+					"Id":"container-123",
+					"State":{"Running":true,"Status":"running"},
+					"NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"32768"}]}}
+				}`), nil
+			default:
+				t.Errorf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			}
+		})},
+	}
+
+	endpoint, err := client.Create(context.Background(), resources.CreateSpec{
+		ID:            "01a1d058-8612-7209-9082-03adf0d11976",
+		Kind:          resources.Postgres,
+		ContainerName: "cloudforge-01a1d058-8612-7209-9082-03adf0d11976",
+		VolumeName:    "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data",
+	})
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+
+	if endpoint.Port != 32768 || endpoint.Host != "127.0.0.1" || endpoint.Username != "cloudforge" || endpoint.Database != "cloudforge" {
+		t.Fatalf("unexpected endpoint %#v", endpoint)
+	}
+
+	if len(endpoint.Password) != 48 {
+		t.Fatalf("expected a 48-character generated password, got %q", endpoint.Password)
+	}
+
+	if createBody["Image"] != "postgres:16-alpine" {
+		t.Fatalf("unexpected image %#v", createBody["Image"])
+	}
+
+	hostConfig, ok := createBody["HostConfig"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing HostConfig %#v", createBody)
+	}
+
+	binds, ok := hostConfig["Binds"].([]any)
+	if !ok || len(binds) != 1 || binds[0] != "cloudforge-01a1d058-8612-7209-9082-03adf0d11976-data:/var/lib/postgresql/data" {
+		t.Fatalf("unexpected binds %#v", hostConfig["Binds"])
+	}
+
+	if len(calls) != 4 {
+		t.Fatalf("unexpected calls %#v", calls)
+	}
+}
+
+func TestCreateResourceRejectsUnknownKindsAndNames(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected Docker request %s %s", request.Method, request.URL.Path)
+
+			return nil, fmt.Errorf("unexpected request")
+		})},
+	}
+
+	cases := []resources.CreateSpec{
+		{ID: "01a1d058-8612-7209-9082-03adf0d11976", Kind: "mysql", ContainerName: "db", VolumeName: "db-data"},
+		{ID: "not-a-uuid", Kind: resources.Postgres, ContainerName: "db", VolumeName: "db-data"},
+		{ID: "01a1d058-8612-7209-9082-03adf0d11976", Kind: resources.Postgres, ContainerName: "bad/name", VolumeName: "db-data"},
+	}
+
+	for _, spec := range cases {
+		if _, err := client.Create(context.Background(), spec); err == nil {
+			t.Fatalf("expected spec %#v to be rejected", spec)
+		}
+	}
+}
+
+func TestDeleteResourceTreatsMissingObjectsAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.Method != http.MethodDelete {
+				t.Fatalf("unexpected method %s", request.Method)
+			}
+
+			if strings.HasPrefix(request.URL.Path, "/containers/") {
+				return jsonResponse(t, http.StatusNotFound, `{}`), nil
+			}
+
+			return jsonResponse(t, http.StatusNoContent, ""), nil
+		})},
+	}
+
+	if err := client.Delete(context.Background(), "missing-container", "missing-volume-data"); err != nil {
+		t.Fatalf("delete missing resource: %v", err)
+	}
+}
+
+func TestInspectResourceReportsMissingContainer(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{
+		httpClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return jsonResponse(t, http.StatusNotFound, `{}`), nil
+		})},
+	}
+
+	state, err := client.InspectResource(context.Background(), "missing-container")
+	if err != nil {
+		t.Fatalf("inspect resource: %v", err)
+	}
+
+	if state.Status != "missing" {
+		t.Fatalf("unexpected state %#v", state)
+	}
+}
+
+func TestRedisResourceConfigUsesPasswordOnlyInTheCommand(t *testing.T) {
+	t.Parallel()
+
+	image, port, dataPath, env, command, username, database := resourceConfig(resources.Redis, "redis-secret")
+
+	if image != "redis:7-alpine" || port != 6379 || dataPath != "/data" {
+		t.Fatalf("unexpected Redis config %s %d %s", image, port, dataPath)
+	}
+
+	if len(env) != 0 || username != "" || database != "" {
+		t.Fatalf("unexpected Redis environment %#v %q %q", env, username, database)
+	}
+
+	if len(command) != 5 || command[0] != "redis-server" || command[4] != "redis-secret" {
+		t.Fatalf("unexpected Redis command %#v", command)
 	}
 }
