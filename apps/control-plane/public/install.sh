@@ -111,7 +111,7 @@ write_env_file() {
     umask 077
     {
         printf 'CLOUDFORGE_CONTROL_PLANE_URL=%s\n' "$(shell_quote "$CONTROL_PLANE_URL")"
-        printf 'CLOUDFORGE_SERVER_ID=%s\n' "$(shell_quote "$SERVER_ID")"
+        printf 'CLOUDFORGE_SERVER_ID=%s\n' "$(shell_quote "$CLOUDFORGE_SERVER_ID")"
         printf 'CLOUDFORGE_DATA_DIR=%s\n' "$(shell_quote "$DATA_DIR")"
         printf 'CLOUDFORGE_DOCKER_SOCKET=%s\n' "$(shell_quote "$DOCKER_SOCKET")"
         printf 'CLOUDFORGE_LOG_LEVEL=%s\n' "$(shell_quote "${CLOUDFORGE_LOG_LEVEL:-info}")"
@@ -305,7 +305,7 @@ main() {
         say "redeeming the single-use enrollment token"
         runuser -u "$AGENT_USER" -- env \
             CLOUDFORGE_CONTROL_PLANE_URL="$CONTROL_PLANE_URL" \
-            CLOUDFORGE_SERVER_ID="$SERVER_ID" \
+            CLOUDFORGE_SERVER_ID="$CLOUDFORGE_SERVER_ID" \
             CLOUDFORGE_MACHINE_ID="${CLOUDFORGE_MACHINE_ID:-}" \
             CLOUDFORGE_DATA_DIR="$DATA_DIR" \
             CLOUDFORGE_DOCKER_SOCKET="$DOCKER_SOCKET" \

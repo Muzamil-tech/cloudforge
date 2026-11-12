@@ -163,8 +163,9 @@ case_write_env_file() {
     CLOUDFORGE_CONFIG_DIR="$WORK/config"
     CLOUDFORGE_DATA_DIR="$WORK/data"
     CLOUDFORGE_DOCKER_SOCKET='/var/run/docker.sock'
+    CLOUDFORGE_SERVER_ID='server-01'
     CLOUDFORGE_ENROLLMENT_TOKEN='super-secret-token'
-    export CLOUDFORGE_CONFIG_DIR CLOUDFORGE_DATA_DIR CLOUDFORGE_DOCKER_SOCKET CLOUDFORGE_ENROLLMENT_TOKEN
+    export CLOUDFORGE_CONFIG_DIR CLOUDFORGE_DATA_DIR CLOUDFORGE_DOCKER_SOCKET CLOUDFORGE_SERVER_ID CLOUDFORGE_ENROLLMENT_TOKEN
 
     mkdir -p "$WORK/config"
 
@@ -175,7 +176,6 @@ case_write_env_file() {
     source_installer
 
     CONTROL_PLANE_URL='https://cloud.example.test'
-    SERVER_ID='server-01'
     write_env_file
 }
 
