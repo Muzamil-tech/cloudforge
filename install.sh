@@ -317,7 +317,7 @@ install_docker() {
 
     if command -v docker >/dev/null 2>&1; then
         say "Docker is already installed"
-        systemctl enable --now docker 2>/dev/null || warn "Docker is installed but the service did not start"
+        timeout 120s systemctl enable --now docker 2>/dev/null || warn "Docker is installed but the service did not start"
         return
     fi
 
@@ -368,7 +368,7 @@ install_docker_ce() {
         return 1
     fi
 
-    if ! systemctl enable --now docker; then
+    if ! timeout 120s systemctl enable --now docker; then
         return 1
     fi
 
@@ -390,9 +390,7 @@ install_distro_docker() {
         return 1
     fi
 
-    apt_get install -y --no-install-recommends docker-compose-v2 >/dev/null 2>&1 || true
-
-    if ! systemctl enable --now docker; then
+    if ! timeout 120s systemctl enable --now docker; then
         return 1
     fi
 
