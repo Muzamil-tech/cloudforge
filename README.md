@@ -41,7 +41,8 @@ agent to the resource-capable build (`v1.2.2` or later).
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
 See [`docs/implementation/PROGRESS.md`](docs/implementation/PROGRESS.md) for the
-requirement-by-requirement verification ledger. Phase 2 has not started.
+requirement-by-requirement verification ledger. Phase 2 is in progress with
+prebuilt image deployments; Phase 1 acceptance remains open.
 
 ## One-command installation
 

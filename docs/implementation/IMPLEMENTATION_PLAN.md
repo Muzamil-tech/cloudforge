@@ -253,8 +253,9 @@ create/start/health; deployment logs and rollback.
 **Acceptance:** a real Laravel repository can be imported, built and deployed to
 a container on the bootstrap node, health-checked, and rolled back, with
 deployment records and logs reflecting actual outcomes.
-**Status:** Not started. Blocked on GitHub App credentials and Docker for full
-verification.
+**Status:** In progress on the owner's direction. First slice: prebuilt image
+deployments. See [`PHASE_2_PLAN.md`](PHASE_2_PLAN.md). Phase 1 acceptance
+remains open.
 
 ---
 

@@ -196,14 +196,22 @@ These are deliberate gaps, not hidden failures:
 ### Milestone 1 conclusion
 
 Code, local automated tests, shell checks and the frontend build are complete.
-The milestone is **not** "Verified in real infrastructure". Phase 2 must not
-start until the Phase 1 acceptance run is performed on real VPS hosts with real
-Docker, PostgreSQL, DNS and TLS.
+The milestone is **not** "Verified in real infrastructure". The clean-VPS,
+three-node and full acceptance run remains open.
 
 ---
 
-## Later milestones
+## Phase 2
 
-Milestones 2–8 remain **Not started**. Their prerequisites and acceptance
-criteria are in `docs/implementation/IMPLEMENTATION_PLAN.md`. Starting them now
-would violate the requirement that Phase 1 acceptance tests pass first.
+The owner directed Phase 2 to start with **prebuilt image deployments**. The full
+plan is in [`PHASE_2_PLAN.md`](PHASE_2_PLAN.md). Phase 1 acceptance remains open;
+Phase 2 code is not to be marked "verified in real infrastructure" until the VPS
+acceptance run in that plan is recorded here.
+
+- Milestone 2 first slice: in progress — application schema, typed agent
+  deploy/start/stop/delete/inspect operations, health checks, deployment history
+  and bounded logs.
+- Milestone 2 GitHub import, BuildKit, environment variables and live logs: not
+  started.
+- Milestones 3–8: not started. Their prerequisites and acceptance criteria remain
+  in `docs/implementation/IMPLEMENTATION_PLAN.md`.
