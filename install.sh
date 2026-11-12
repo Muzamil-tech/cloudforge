@@ -317,11 +317,25 @@ install_docker() {
 
     if command -v docker >/dev/null 2>&1; then
         say "Docker is already installed"
-        systemctl enable --now docker
+        systemctl enable --now docker 2>/dev/null || warn "Docker is installed but the service did not start"
         return
     fi
 
-    say "installing Docker Engine"
+    if install_docker_ce; then
+        return
+    fi
+
+    warn "Docker's official repository failed; falling back to Ubuntu's docker.io package"
+
+    if install_distro_docker; then
+        return
+    fi
+
+    warn "Docker could not be installed; CloudForge will continue without Docker inventory"
+}
+
+install_docker_ce() {
+    say "installing Docker Engine from Docker's repository"
 
     wait_for_apt_lock
 
@@ -329,22 +343,59 @@ install_docker() {
     arch="$(dpkg --print-architecture)"
 
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL "https://download.docker.com/linux/${OS_ID}/gpg" \
-        -o /etc/apt/keyrings/docker.asc
+
+    if ! curl -fsSL --http1.1 --retry 3 --retry-delay 2 \
+        "https://download.docker.com/linux/${OS_ID}/gpg" \
+        -o /etc/apt/keyrings/docker.asc; then
+        return 1
+    fi
+
     chmod a+r /etc/apt/keyrings/docker.asc
 
     printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
         "$arch" "$OS_ID" "$OS_CODENAME" >/etc/apt/sources.list.d/docker.list
 
-    apt_get update
-    apt_get install -y --no-install-recommends \
+    if ! apt_get update; then
+        return 1
+    fi
+
+    if ! apt_get install -y --no-install-recommends \
         containerd.io \
         docker-buildx-plugin \
         docker-ce \
         docker-ce-cli \
-        docker-compose-plugin
+        docker-compose-plugin; then
+        return 1
+    fi
 
-    systemctl enable --now docker
+    if ! systemctl enable --now docker; then
+        return 1
+    fi
+
+    docker --version
+}
+
+install_distro_docker() {
+    say "installing Docker Engine from the distribution repository"
+
+    rm -f /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
+
+    wait_for_apt_lock
+
+    if ! apt_get update; then
+        return 1
+    fi
+
+    if ! apt_get install -y --no-install-recommends docker.io; then
+        return 1
+    fi
+
+    apt_get install -y --no-install-recommends docker-compose-v2 >/dev/null 2>&1 || true
+
+    if ! systemctl enable --now docker; then
+        return 1
+    fi
+
     docker --version
 }
 
