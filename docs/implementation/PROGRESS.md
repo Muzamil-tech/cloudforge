@@ -115,9 +115,11 @@ or token from the dashboard.
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |
 | `npm run build` | Vite 8.3.8 built 617 modules; lazy page chunks, main JS 361.61 kB (gzip 112.96 kB), CSS 87.02 kB (gzip 16.80 kB). |
 | `VERSION=1.0.0 sh packaging/package.sh` | Built `cloudforge-agent_linux_amd64.tar.gz`, `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS`. |
+| `VERSION=1.2.1 sh packaging/package.sh` | Built the mirror-first agent archives and `SHA256SUMS`. |
 | GitHub release `v1.0.0` | Three assets uploaded; the latest download URLs return HTTP 200. |
 | GitHub release `v1.1.0` | Managed-resource agent assets uploaded; latest download URLs return HTTP 200. |
 | GitHub release `v1.2.0` | Project-workspace and registry-fallback agent assets uploaded; latest download URLs return HTTP 200. |
+| GitHub release `v1.2.1` | Mirror-first agent assets uploaded; all three download URLs return HTTP 200. |
 | `go test`/`go vet` after machine-id override | Passed. The new override and invalid-value tests are in `internal/enrollment/enrollment_test.go`. |
 
 The final full PHP suite, after the installer, resource layer, project workspace
@@ -176,7 +178,7 @@ These are deliberate gaps, not hidden failures:
 - No real browser session. Inertia responses and props are asserted in feature
   tests; no browser click-through or visual review was performed.
 - No three-node enrollment; the Phase 1 acceptance criterion remains open.
-- Release assets `v1.2.0` are published, but the installer's live download path
+- Release assets `v1.2.1` are published, but the installer's live download path
   has not been exercised from a VPS.
 - `agent.env` mode `0600` could not be confirmed on Windows; the harness skips
   that assertion. Linux CI must run it.
