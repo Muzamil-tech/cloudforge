@@ -4,16 +4,16 @@ use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('servers:mark-unreachable')
     ->everyMinute()
-    ->withoutOverlapping();
+    ->withoutOverlapping(5);
 
 Schedule::command('resources:reconcile')
     ->everyMinute()
-    ->withoutOverlapping();
+    ->withoutOverlapping(5);
 
 Schedule::command('metrics:prune')
     ->dailyAt('03:15')
-    ->withoutOverlapping();
+    ->withoutOverlapping(30);
 
 Schedule::command('queue:prune-failed', ['--hours' => 168])
     ->dailyAt('03:45')
-    ->withoutOverlapping();
+    ->withoutOverlapping(30);

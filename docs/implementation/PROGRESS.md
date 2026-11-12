@@ -94,20 +94,22 @@ or token from the dashboard.
 | 28 | Product UI shell and design foundation | Theme tokens, collapsible sidebar, breadcrumbs, account menu, shared cards/stats/credentials, responsive drawer | `DatabasesIndex`/dashboard feature tests; `npm run build` | Tested locally. No browser E2E or formal contrast audit. |
 | 29 | Organization-wide Databases workspace | Real resource index with search, filters, sorting and lifecycle actions | `ResourceProvisioningTest` | Tested locally. |
 | 30 | Projects listing and workspace | Real counts, search/sort, project header, Overview/Databases/Environments/Activity/Settings tabs | `ResourceProvisioningTest`; `npm run build` | Tested locally. No browser E2E. |
-| 31 | Registry-blocked image pulls | Local image skip, Docker Hub → `mirror.gcr.io` → `public.ecr.aws` fallback, sanitized errors, configurable images | Go Docker tests | Tested locally against fake Docker responses. Real registry reachability unverified. |
+| 31 | Registry-blocked image pulls | Local image reuse, mirror-first default pulls, three-minute per-registry timeout, Docker Hub and `public.ecr.aws` fallback, sanitized errors, configurable images | Go Docker tests | Tested locally against fake Docker responses. Real registry reachability unverified. |
+| 32 | Stuck resource recovery | Reconcile fails commandless resources, expires the command ledger with the resource, reports waiting operations, bounded scheduler overlap locks | `ResourceProvisioningTest` reconcile tests | Tested locally. |
 
 ### Command evidence
 
 | Command | Result |
 | --- | --- |
 | `vendor/bin/pint --format agent` | Formatted four files; the rerun reports `passed`. |
-| `php artisan test --compact` | Final full run: 195 tests passed, 1,535 assertions, 274.3 seconds. |
+| `php artisan test --compact` | Final full run: 198 tests passed, 1,544 assertions, 149.7 seconds. |
 | `php artisan test --compact tests/Feature/InstallerScriptTest.php tests/Feature/BootstrapCommandTest.php` | 12 tests passed, 57 assertions after the final shell edits. |
 | `bash -n install.sh` | Parsed without error. |
 | `bash tests/shell/one_command_installer_test.sh install.sh` | 20 assertions, 0 failures. |
 | `sh tests/shell/installer_test.sh` | 35 assertions, 0 failures, 2 skipped mode/execute-bit checks on Windows. |
 | `php artisan test --compact tests/Feature/ResourceProvisioningTest.php tests/Feature/AgentCommandTest.php` | 28 tests passed, 213 assertions. |
-| `go test ./internal/docker ./internal/commands` | Passed, including managed resource creation, deletion, executor payload tests and registry-mirror fallback. |
+| `php artisan test --compact tests/Feature/ResourceProvisioningTest.php` | 18 tests passed, 199 assertions after the reconciliation changes. |
+| `go test ./internal/docker ./internal/commands` | Passed, including managed resource creation, deletion, executor payload tests and mirror-first registry fallback. |
 | `go test ./...` | All packages passed; `internal/agent` 4.2s, `internal/client` 6.2s, `internal/enrollment` 6.7s. |
 | `go vet ./...` | No findings. |
 | `sh -n` on `public/install.sh`, `bootstrap-node.sh`, `installer_test.sh`, `package.sh` | All parsed without error. |

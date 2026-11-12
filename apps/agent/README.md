@@ -199,9 +199,10 @@ Managed containers carry `cloudforge.managed`, `cloudforge.resource_id` and
 to the control plane once; the control plane encrypts it and removes it from the
 generic command result.
 
-If the image already exists locally, the agent skips the registry request. If a
-Docker Hub pull fails at the registry/CDN layer, it tries
-`mirror.gcr.io/library/...` and `public.ecr.aws/docker/library/...`. An operator
+If the image already exists locally, the agent skips the registry request. For
+the default images it tries `mirror.gcr.io/library/...` first, then Docker Hub,
+then `public.ecr.aws/docker/library/...`. Each registry attempt is bounded so a
+blocked CDN cannot hold the command queue for the whole create TTL. An operator
 can pin an internal registry with `CLOUDFORGE_POSTGRES_IMAGE` and
 `CLOUDFORGE_REDIS_IMAGE` in `/etc/cloudforge/agent.env`.
 

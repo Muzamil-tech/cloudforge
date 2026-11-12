@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,7 +31,10 @@ import (
 
 const (
 	maxResponseBytes = 1 << 20
-	pullTimeout      = 15 * time.Minute
+	// A managed image must finish pulling well inside the create command TTL.
+	// Docker Hub can hang on a blocked blob CDN instead of failing, so each
+	// candidate gets a bounded attempt before the next registry is tried.
+	pullTimeout = 3 * time.Minute
 )
 
 var (
@@ -302,19 +306,32 @@ func (c *Client) InspectResource(ctx context.Context, containerRef string) (reso
 }
 
 func (c *Client) prepareImage(ctx context.Context, kind resources.Kind, image string) (string, error) {
-	var failures []string
+	candidates := imageCandidates(kind, image)
 
-	for _, candidate := range imageCandidates(kind, image) {
+	// Reuse any local tag first. This includes an image an operator pre-pulled
+	// and retagged, so a blocked registry never affects an existing image.
+	for _, candidate := range candidates {
 		exists, lookupErr := c.imageExists(ctx, candidate)
 
 		if lookupErr == nil && exists {
+			slog.Info("managed resource image already present", "image", candidate)
+
 			return candidate, nil
 		}
+	}
+
+	var failures []string
+
+	for _, candidate := range pullCandidates(kind, image) {
+		slog.Info("pulling managed resource image", "image", candidate)
 
 		if err := c.pullImage(ctx, candidate); err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %s", candidate, err))
+
 			continue
 		}
+
+		slog.Info("managed resource image ready", "image", candidate)
 
 		return candidate, nil
 	}
@@ -364,6 +381,19 @@ func imageCandidates(kind resources.Kind, image string) []string {
 	}
 
 	return unique
+}
+
+func pullCandidates(kind resources.Kind, image string) []string {
+	candidates := imageCandidates(kind, image)
+
+	if len(candidates) < 3 {
+		return candidates
+	}
+
+	// Docker Hub is the canonical reference, but its blob CDN is blocked on
+	// some networks and can hang until the timeout. Try the Google mirror
+	// first for the default images, then fall back to Docker Hub and ECR.
+	return []string{candidates[1], candidates[0], candidates[2]}
 }
 
 func defaultImage(value string, fallback string) string {

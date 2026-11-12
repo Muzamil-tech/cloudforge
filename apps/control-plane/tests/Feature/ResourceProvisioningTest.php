@@ -459,6 +459,49 @@ class ResourceProvisioningTest extends TestCase
         $this->assertNotNull($resource->last_error);
     }
 
+    public function test_reconcile_fails_a_transitional_resource_without_a_command(): void
+    {
+        [, , $project, $server] = $this->context();
+
+        $resource = Resource::factory()
+            ->forProject($project, $project->environments()->firstOrFail(), $server)
+            ->create(['name' => 'orphaned-db']);
+
+        Artisan::call('resources:reconcile');
+
+        $resource->refresh();
+
+        $this->assertSame(ResourceStatus::Failed, $resource->status);
+        $this->assertSame('The resource has no provisioning command to complete.', $resource->last_error);
+    }
+
+    public function test_reconcile_expires_the_agent_command_with_the_resource(): void
+    {
+        [$owner, , $project, $server] = $this->context();
+
+        $resource = app(CreateResource::class)->execute(
+            $project,
+            $project->environments()->firstOrFail(),
+            $server,
+            'expired-command-db',
+            ResourceType::Postgresql,
+            $owner,
+        );
+
+        $command = AgentCommand::query()
+            ->where('command_id', $resource->last_command_id)
+            ->sole();
+        $command->forceFill(['expires_at' => now()->subMinute()])->save();
+
+        Artisan::call('resources:reconcile');
+
+        $command->refresh();
+        $this->assertSame(AgentCommandStatus::Expired, $command->status);
+        $this->assertNotNull($command->completed_at);
+        $this->assertNotNull($command->error_message);
+        $this->assertSame(ResourceStatus::Failed, $resource->refresh()->status);
+    }
+
     public function test_project_page_lists_resources_without_exposing_credentials(): void
     {
         [$owner, $organization, $project, $server] = $this->context();

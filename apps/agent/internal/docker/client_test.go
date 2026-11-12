@@ -178,9 +178,7 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 
 			switch {
 			case request.Method == http.MethodGet && request.URL.Path == "/images/postgres:16-alpine/json":
-				return jsonResponse(t, http.StatusNotFound, `{}`), nil
-			case request.Method == http.MethodPost && request.URL.Path == "/images/create":
-				return jsonResponse(t, http.StatusOK, `{"status":"Image is up to date"}`), nil
+				return jsonResponse(t, http.StatusOK, `{}`), nil
 			case request.Method == http.MethodPost && request.URL.Path == "/containers/create":
 				if err := json.NewDecoder(request.Body).Decode(&createBody); err != nil {
 					t.Fatalf("decode create body: %v", err)
@@ -235,7 +233,7 @@ func TestCreateResourceUsesAnAllowlistedContainerSpec(t *testing.T) {
 		t.Fatalf("unexpected binds %#v", hostConfig["Binds"])
 	}
 
-	if len(calls) != 5 {
+	if len(calls) != 4 {
 		t.Fatalf("unexpected calls %#v", calls)
 	}
 }
@@ -369,6 +367,32 @@ func TestCleanPullMessageRemovesSignedRegistryUrls(t *testing.T) {
 
 	if !strings.Contains(message, "registry denied or network blocked") {
 		t.Fatalf("unexpected message %q", message)
+	}
+}
+
+func TestDefaultImagesPreferTheMirrorAndCustomImagesStayPinned(t *testing.T) {
+	t.Parallel()
+
+	candidates := pullCandidates(resources.Postgres, "postgres:16-alpine")
+	expected := []string{
+		"mirror.gcr.io/library/postgres:16-alpine",
+		"postgres:16-alpine",
+		"public.ecr.aws/docker/library/postgres:16-alpine",
+	}
+
+	if len(candidates) != len(expected) {
+		t.Fatalf("unexpected candidates %#v", candidates)
+	}
+
+	for index, candidate := range expected {
+		if candidates[index] != candidate {
+			t.Fatalf("unexpected candidate order %#v", candidates)
+		}
+	}
+
+	custom := pullCandidates(resources.Postgres, "registry.internal/postgres:16-alpine")
+	if len(custom) != 1 || custom[0] != "registry.internal/postgres:16-alpine" {
+		t.Fatalf("a custom image must not be replaced by a public fallback: %#v", custom)
 	}
 }
 

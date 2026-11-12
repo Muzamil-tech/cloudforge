@@ -180,7 +180,10 @@ func newLogger(level string) *slog.Logger {
 		threshold = slog.LevelInfo
 	}
 
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: threshold}))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: threshold}))
+	slog.SetDefault(logger)
+
+	return logger
 }
 
 func usage() {

@@ -25,12 +25,13 @@ containers are provisioned through the agent, with encrypted credentials,
 start/stop/delete and live state. MySQL and application deployment remain later
 milestones.
 
-Managed resources pull `postgres:16-alpine` and `redis:7-alpine` from Docker Hub.
-The VPS must be able to reach the Docker registry, or a registry mirror must be
-configured on the Docker daemon.
+Managed resources use `postgres:16-alpine` and `redis:7-alpine`. The agent
+reuses a local image first, then tries `mirror.gcr.io` before Docker Hub and
+falls back to `public.ecr.aws`. An internal registry can be pinned with
+`CLOUDFORGE_POSTGRES_IMAGE` and `CLOUDFORGE_REDIS_IMAGE`.
 
 Existing installations must rerun the installer to update the control plane and
-agent to the resource-capable build (`v1.2.0` or later).
+agent to the resource-capable build (`v1.2.1` or later).
 
 **Not yet verified in real infrastructure:** clean VPS installation, real
 PostgreSQL/Redis, real Docker, DNS/TLS, and the three-VPS Phase 1 acceptance run.
@@ -111,10 +112,10 @@ go build -o cloudforge-agent ./cmd/cloudforge-agent
 Release archives are published as GitHub releases:
 
 ```sh
-VERSION=1.0.0 sh packaging/package.sh
+VERSION=1.2.1 sh packaging/package.sh
 ```
 
-Release `v1.2.0` contains `cloudforge-agent_linux_amd64.tar.gz`,
+Release `v1.2.1` contains `cloudforge-agent_linux_amd64.tar.gz`,
 `cloudforge-agent_linux_arm64.tar.gz` and `SHA256SUMS` under
 `Muzamil-tech/cloudforge`. The dashboard-generated installer resolves the latest
 release automatically.

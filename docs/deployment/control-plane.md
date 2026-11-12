@@ -74,10 +74,11 @@ The installer is idempotent. Re-running it updates the checkout, dependencies,
 migrations, Nginx configuration and agent while preserving `.env` secrets and the
 database role.
 
-Managed PostgreSQL and Redis resources are pulled from Docker Hub. The VPS needs
-outbound access to the registry, or a registry mirror configured on the Docker
-daemon. The agent falls back to `mirror.gcr.io` and `public.ecr.aws` when Docker
-Hub's blob CDN is blocked; custom images can be pinned with
+Managed PostgreSQL and Redis resources use `postgres:16-alpine` and
+`redis:7-alpine`. The agent reuses a local image first, then tries
+`mirror.gcr.io` before Docker Hub and falls back to `public.ecr.aws`. Each
+registry attempt has a three-minute timeout so a blocked CDN cannot hold the
+command queue until the create command expires. Custom images can be pinned with
 `CLOUDFORGE_POSTGRES_IMAGE` and `CLOUDFORGE_REDIS_IMAGE`.
 
 ### Using a private fork

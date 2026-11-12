@@ -408,6 +408,13 @@ func (e *Executor) reportResult(outcome Outcome) error {
 		return fmt.Errorf("report result for command %s: %w", outcome.CommandID, err)
 	}
 
+	e.log.Info("command result reported",
+		"command_id", outcome.CommandID,
+		"operation", outcome.Operation,
+		"status", status,
+		"duration_ms", outcome.DurationMS,
+	)
+
 	return nil
 }
 

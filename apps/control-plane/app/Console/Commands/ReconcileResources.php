@@ -22,16 +22,23 @@ class ReconcileResources extends Command
         AuditLogger $auditLogger,
     ): int {
         $changed = 0;
+        $waiting = 0;
 
         Resource::query()
             ->whereIn('status', array_map(
                 fn (ResourceStatus $status): string => $status->value,
                 ResourceStatus::transitional(),
             ))
-            ->whereNotNull('last_command_id')
             ->orderBy('id')
-            ->chunkById(100, function ($resources) use ($results, $auditLogger, &$changed): void {
+            ->chunkById(100, function ($resources) use ($results, $auditLogger, &$changed, &$waiting): void {
                 foreach ($resources as $resource) {
+                    if ($resource->last_command_id === null) {
+                        $this->failResource($resource, 'The resource has no provisioning command to complete.', $auditLogger);
+                        $changed++;
+
+                        continue;
+                    }
+
                     $command = AgentCommand::query()
                         ->where('command_id', $resource->last_command_id)
                         ->first();
@@ -42,6 +49,8 @@ class ReconcileResources extends Command
 
                         continue;
                     }
+
+                    $this->describe($resource, $command);
 
                     if ($command->status === AgentCommandStatus::Completed) {
                         $results->handle($command, true, $command->result ?? [], null);
@@ -58,19 +67,58 @@ class ReconcileResources extends Command
                     }
 
                     if ($command->status->isTerminal() || $command->expires_at->isPast()) {
-                        $this->failResource(
-                            $resource,
-                            $command->error_message ?: 'The agent did not complete the resource operation before it expired.',
-                            $auditLogger,
-                        );
+                        $message = $command->error_message
+                            ?: 'The agent did not complete the resource operation before it expired.';
+
+                        $this->expireCommand($command, $message);
+                        $this->failResource($resource, $message, $auditLogger);
                         $changed++;
+
+                        continue;
                     }
+
+                    $waiting++;
                 }
             });
 
         $this->info("{$changed} resource operation(s) reconciled.");
 
+        if ($waiting > 0) {
+            $this->line("{$waiting} resource operation(s) are still waiting for an active agent command.");
+        }
+
         return self::SUCCESS;
+    }
+
+    private function describe(Resource $resource, AgentCommand $command): void
+    {
+        if (! $this->output->isVerbose()) {
+            return;
+        }
+
+        $this->line(sprintf(
+            '%s [%s] command=%s operation=%s status=%s attempts=%d expires=%s',
+            $resource->name,
+            $resource->status->value,
+            $command->command_id,
+            $command->operation->value,
+            $command->status->value,
+            $command->attempts,
+            $command->expires_at?->toIso8601String() ?? 'unknown',
+        ));
+    }
+
+    private function expireCommand(AgentCommand $command, string $message): void
+    {
+        if ($command->status->isTerminal()) {
+            return;
+        }
+
+        $command->forceFill([
+            'status' => AgentCommandStatus::Expired,
+            'error_message' => mb_substr($message, 0, 2000),
+            'completed_at' => now(),
+        ])->save();
     }
 
     private function failResource(Resource $resource, string $message, AuditLogger $auditLogger): void
